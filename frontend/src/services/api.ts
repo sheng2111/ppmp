@@ -2,7 +2,7 @@ import axios from "axios";
 import { PPMP, PPMPItem } from "../types/ppmp";
 
 const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://192.168.2.2:8000",
+  baseURL: process.env.REACT_APP_API_URL || "http://192.168.3.12:8000",
 });
 
 // Attach JWT token to every request
