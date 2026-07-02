@@ -1,29 +1,21 @@
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
 
-# --- Users Database ---
-USERS_DATABASE_URL = "sqlite:///./users.db"
-users_engine = create_engine(USERS_DATABASE_URL, connect_args={"check_same_thread": False})
-UsersSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=users_engine)
-UsersBase = declarative_base()
 
-# --- PPMP Database ---
-PPMP_DATABASE_URL = "sqlite:///./ppmp.db"
-ppmp_engine = create_engine(PPMP_DATABASE_URL, connect_args={"check_same_thread": False})
-PPMPSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=ppmp_engine)
-PPMPBase = declarative_base()
+DATABASE_URL = "sqlite:///./epms.db"
 
-# --- Dependency: Users DB session ---
-def get_users_db():
-    db = UsersSessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+engine = create_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False}
+)
 
-# --- Dependency: PPMP DB session ---
-def get_ppmp_db():
-    db = PPMPSessionLocal()
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+Base = declarative_base()
+
+def get_db():
+    db = SessionLocal()
     try:
         yield db
     finally:

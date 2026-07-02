@@ -1,96 +1,78 @@
-import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
-import Layout from "./components/layout/Layout";
+import { useAuth } from "./context/AuthContext";
 import LoginPage from "./pages/LoginPage";
-import Dashboard from "./pages/Dashboard";
-import AuthCallback from "./pages/AuthCallback";
-import OnboardingPage from "./pages/OnboardingPage";
-import ForgotPasswordPage from "./pages/ForgotPasswordPage";
-import ResetPasswordPage from "./pages/ResetPasswordpage";
-import PPMPForm from "./pages/PPMPForm";
+import PendingApprovalPage from "./pages/PendingApprovalPage";
+import DashboardPage from "./pages/DashboardPage";
+import NotFoundPage from "./pages/NotfoundPage";
+import OfficesPage from "./pages/admin/OfficesPage";
+import ItemPage from "./pages/admin/ItemPage";
+import PPMPListPage from "./pages/PPMPListPage";
+import CreatePPMPPage from "./pages/CreatePPMPPage";
+import PPMPDetailPage from "./pages/PPMPDetailPage";
+import EditPPMPPage from "./pages/EditPPMPPage";
+import APPPage from "./pages/APPPage";
+import PRListPage from "./pages/PRListPage";
+import CreatePRPage from "./pages/CreatePRPage";
+import PRDetailPage from "./pages/PRDetailPage";
+import Layout from "./components/layout/layout";
 
-// Lazy Loaded Pages (Kept cleanly split to prevent overlapping declarations)
-const PPMPList = React.lazy(() => import("./pages/PPMPList"));
-const PPMPDetail = React.lazy(() => import("./pages/PPMPDetail"));
-
-const PrivateRoute = ({ children }: { children: React.ReactNode }) => {
-  const { user, isLoading } = useAuth();
-  if (isLoading)
-    return (
-      <div className="flex items-center justify-center min-h-screen text-gray-400">
-        Loading...
-      </div>
-    );
-  if (!user) return <Navigate to="/login" />;
-  return <Layout>{children}</Layout>;
-};
-
-const AppRoutes = () => (
-  <Routes>
-    <Route path="/login" element={<LoginPage />} />
-    <Route
-      path="/"
-      element={
-        <PrivateRoute>
-          <Dashboard />
-        </PrivateRoute>
-      }
-    />
-    <Route
-      path="/ppmp"
-      element={
-        <PrivateRoute>
-          <React.Suspense fallback={<div>Loading...</div>}>
-            <PPMPList />
-          </React.Suspense>
-        </PrivateRoute>
-      }
-    />
-    <Route
-      path="/ppmp/new"
-      element={
-        <PrivateRoute>
-          <React.Suspense fallback={<div>Loading...</div>}>
-            <PPMPForm />
-          </React.Suspense>
-        </PrivateRoute>
-      }
-    />
-    <Route
-      path="/ppmp/:id"
-      element={
-        <PrivateRoute>
-          <React.Suspense fallback={<div>Loading...</div>}>
-            <PPMPDetail />
-          </React.Suspense>
-        </PrivateRoute>
-      }
-    />
-    <Route
-      path="/ppmp/:id/edit"
-      element={
-        <PrivateRoute>
-          <React.Suspense fallback={<div>Loading...</div>}>
-            <PPMPForm />
-          </React.Suspense>
-        </PrivateRoute>
-      }
-    />
-    <Route path="/auth/callback" element={<AuthCallback />} />
-    <Route path="*" element={<Navigate to="/" />} />
-    <Route path="/onboarding" element={<OnboardingPage />} />
-    <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-    <Route path="/reset-password" element={<ResetPasswordPage />} />
-  </Routes>
+const Loading = () => (
+  <div className="min-h-screen bg-blue-50 flex items-center justify-center">
+    <p className="text-blue-800 text-sm">Loading...</p>
+  </div>
 );
 
-const App = () => (
-  <AuthProvider>
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, dbUser, loading } = useAuth();
+
+  if (loading) return <Loading />;
+
+  // Not signed in at all
+  if (!user) return <Navigate to="/login" replace />;
+
+  // Signed in but backend user not yet synced
+  if (!dbUser) return <Loading />;
+
+  // Signed in but not approved yet — show pending screen, nothing else
+  if (!dbUser.is_approved) return <PendingApprovalPage />;
+
+  return <>{children}</>;
+}
+
+export default function App() {
+  const { user, loading } = useAuth();
+
+  if (loading) return <Loading />;
+
+  return (
     <BrowserRouter>
-      <AppRoutes />
+      <Routes>
+        <Route
+          path="/login"
+          element={user ? <Navigate to="/dashboard" replace /> : <LoginPage />}
+        />
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route path="/ppmps" element={<PPMPListPage />} />
+          <Route path="/ppmps/create" element={<CreatePPMPPage />} />
+          <Route path="/ppmps/:id" element={<PPMPDetailPage />} />
+          <Route path="/ppmps/:id/edit" element={<EditPPMPPage />} />
+          <Route path="/admin/offices" element={<OfficesPage />} />
+          <Route path="/admin/items" element={<ItemPage />} />
+          <Route path="/app" element={<APPPage />} />
+          <Route path="/prs" element={<PRListPage />} />
+          <Route path="/prs/create" element={<CreatePRPage />} />
+          <Route path="/prs/:id" element={<PRDetailPage />} />
+        </Route>
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
     </BrowserRouter>
-  </AuthProvider>
-);
-
-export default App;
+  );
+}

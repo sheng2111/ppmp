@@ -1,71 +1,91 @@
-import React, {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from "react";
-import { login as apiLogin } from "../services/api";
+import { createContext, useContext, useEffect, useState } from "react";
+import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
+import api from "../services/api";
+import type { DBUser } from "../types";
 
 interface AuthContextType {
-  user: string | null;
-  fullName: string | null; // ✅ add
-  token: string | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  user: SupabaseUser | null;
+  dbUser: DBUser | null;
+  session: Session | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshDbUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fullName, setFullName] = useState<string | null>(null); // ✅
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [dbUser, setDbUser] = useState<DBUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    const savedUser = localStorage.getItem("user");
-    const savedFullName = localStorage.getItem("full_name"); // ✅
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(savedUser);
+  const syncUser = async (supabaseUser: SupabaseUser) => {
+    try {
+      const response = await api.post("/auth/register", {
+        supabase_uid: supabaseUser.id,
+        full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email,
+        email: supabaseUser.email,
+      });
+      setDbUser(response.data);
+    } catch (err) {
+      console.error("Failed to sync user:", err);
     }
-    if (savedFullName) setFullName(savedFullName); // ✅
-    setIsLoading(false);
-  }, []);
-
-  const login = async (username: string, password: string) => {
-    const res = await apiLogin(username, password);
-    const { access_token } = res.data;
-    localStorage.setItem("token", access_token);
-    localStorage.setItem("user", username);
-    setToken(access_token);
-    setUser(username);
   };
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("full_name"); // ✅
-    setToken(null);
-    setUser(null);
-    setFullName(null); // ✅
+  const refreshDbUser = async () => {
+    if (user) await syncUser(user);
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) syncUser(session.user);
+      setLoading(false);
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) await syncUser(session.user);
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const signInWithGoogle = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+  };
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setDbUser(null);
   };
 
   return (
-    // ✅ add fullName to value
     <AuthContext.Provider
-      value={{ user, fullName, token, isLoading, login, logout }}
+      value={{
+        user,
+        dbUser,
+        session,
+        loading,
+        signInWithGoogle,
+        signOut,
+        refreshDbUser,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
-};
+}
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
-  return ctx;
-};
+export const useAuth = () => useContext(AuthContext);

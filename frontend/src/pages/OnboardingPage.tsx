@@ -1,171 +1,115 @@
-import React, { useState, useEffect } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "../lib/supabase";
-import API from "../services/api";
+import api from "../services/api";
+import { useAuth } from "../context/AuthContext";
 
-const OnboardingPage = () => {
-  const [fullName, setFullName] = useState("");
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [email, setEmail] = useState("");
-  const [googleId, setGoogleId] = useState("");
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+export default function OnboardingPage() {
+  const { user, refreshDbUser } = useAuth();
   const navigate = useNavigate();
+  const [officeName, setOfficeName] = useState("");
+  const [officeCode, setOfficeCode] = useState("");
+  const [headName, setHeadName] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  useEffect(() => {
-    // Get Google user info from Supabase session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        navigate("/login");
-        return;
-      }
-      setEmail(session.user.email || "");
-      setGoogleId(session.user.id || "");
-      // Pre-fill name from Google
-      setFullName(session.user.user_metadata?.full_name || "");
-    });
-  }, []);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async () => {
+    if (!officeName || !officeCode) {
+      setError("Office name and code are required.");
+      return;
+    }
+    setSaving(true);
     setError("");
-
-    if (password !== confirmPassword) {
-      setError("Passwords do not match");
-      return;
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters");
-      return;
-    }
-
-    setLoading(true);
     try {
-      const res = await API.post("/auth/complete-profile", {
-        full_name: fullName,
-        username,
-        password,
-        email,
-        google_id: googleId,
+      await api.post("/auth/onboard", {
+        supabase_uid: user?.id,
+        office_name: officeName,
+        office_code: officeCode,
+        head_name: headName || null,
+        designation: designation || null,
       });
-
-      const { access_token } = res.data;
-      localStorage.setItem("token", access_token);
-      localStorage.setItem("user", username);
-      localStorage.setItem("full_name", fullName);
+      await refreshDbUser();
       navigate("/dashboard");
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(typeof detail === "string" ? detail : "Something went wrong.");
+      setError(err.response?.data?.detail || "Failed to complete setup.");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-secondary flex items-center justify-center">
-      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary rounded-full mb-4">
-            <span className="text-white text-2xl">👤</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-800">Complete Profile</h1>
-          <p className="text-gray-500 text-sm mt-1">
-            Set up your account to continue
+    <div className="min-h-screen bg-blue-50 flex items-center justify-center p-6">
+      <div className="bg-white rounded-2xl shadow-md p-8 w-full max-w-md">
+        <div className="text-center mb-6">
+          <h1 className="text-xl font-semibold text-blue-900">
+            Welcome to e-PMS!
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Let's set up your office so you can start creating PPMPs.
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Full Name
+            <label className="text-xs text-gray-500 mb-1 block">
+              Office / Department Name <span className="text-red-400">*</span>
             </label>
             <input
-              type="text"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Enter your full name"
-              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={officeName}
+              onChange={(e) => setOfficeName(e.target.value)}
+              placeholder="e.g. College of Information and Computing Technology"
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Username
+            <label className="text-xs text-gray-500 mb-1 block">
+              Office Code <span className="text-red-400">*</span>
             </label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Choose a username"
-              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={officeCode}
+              onChange={(e) => setOfficeCode(e.target.value.toUpperCase())}
+              placeholder="e.g. CICT"
             />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Email
+            <label className="text-xs text-gray-500 mb-1 block">
+              Office Head Name (optional)
             </label>
             <input
-              type="email"
-              value={email}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-gray-50 text-gray-500"
-              disabled
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={headName}
+              onChange={(e) => setHeadName(e.target.value)}
+              placeholder="e.g. Juan Dela Cruz"
             />
-            <p className="text-xs text-gray-400 mt-1">
-              From your Google account
-            </p>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Password
+            <label className="text-xs text-gray-500 mb-1 block">
+              Designation (optional)
             </label>
             <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Create a password"
-              required
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              placeholder="e.g. Dean, Campus Director"
             />
           </div>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Confirm Password
-            </label>
-            <input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              placeholder="Confirm your password"
-              required
-            />
+        {error && (
+          <div className="mt-3 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
+            {error}
           </div>
+        )}
 
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 text-sm px-3 py-2 rounded-lg">
-              {error}
-            </div>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-primary hover:bg-primary-dark text-white py-2.5 rounded-lg font-medium transition-colors disabled:opacity-60"
-          >
-            {loading ? "Saving..." : "Complete Setup"}
-          </button>
-        </form>
+        <button
+          onClick={handleSubmit}
+          disabled={saving}
+          className="w-full mt-6 px-4 py-2.5 bg-blue-700 text-white text-sm rounded-lg hover:bg-blue-800 disabled:opacity-50 transition"
+        >
+          {saving ? "Setting up..." : "Continue to Dashboard"}
+        </button>
       </div>
     </div>
   );
-};
-
-export default OnboardingPage;
+}
