@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
@@ -20,9 +21,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="e-PMS API", version="2.0.0", lifespan=lifespan)
 
+# Comma-separated list of allowed browser origins (e.g. your deployed
+# frontend URL). Falls back to the known production frontend when unset.
+# Local dev origins are always allowed.
+cors_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS", "https://ppmp-mauve.vercel.app"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):5173",
+    allow_origins=cors_origins,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

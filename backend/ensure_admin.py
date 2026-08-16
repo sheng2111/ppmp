@@ -1,5 +1,5 @@
 import asyncio
-from app.database import init_db
+from app.services.database import init_db
 from app.models.user import User, OfficeAssignment
 from app.models.office import Office
 
