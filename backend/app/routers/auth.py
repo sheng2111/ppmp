@@ -1,135 +1,137 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from sqlalchemy.orm import Session
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
-from pydantic import BaseModel
-from ..database import get_users_db
-from ..models.user import User
-from ..core.config import settings
+from fastapi import APIRouter, HTTPException
+from beanie import PydanticObjectId
+from beanie.operators import In
+from typing import List, Optional
 
-router = APIRouter()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+from app.models.user import User
+from app.schemas.user import UserCreate, UserOut, UserUpdate, OnboardRequest
+
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-class RegisterRequest(BaseModel):
-    username: str
-    password: str
+async def require_admin(requester_uid: str) -> User:
+    requester = await User.find_one(User.supabase_uid == requester_uid)
+    if not requester or requester.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return requester
 
 
-def verify_password(plain, hashed):
-    return pwd_context.verify(plain[:72], hashed)
+# ── Public / self endpoints ──────────────────────────────────────────────────
 
-
-def hash_password(password):
-    return pwd_context.hash(password[:72])
-
-
-def create_token(data: dict):
-    to_encode = data.copy()
-    expire = datetime.utcnow() + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-
-
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_users_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+@router.post("/register", response_model=UserOut)
+async def register_user(payload: UserCreate):
+    """Legacy endpoint — creates a bare User. Kept for backward compatibility."""
+    existing = await User.find_one(User.supabase_uid == payload.supabase_uid)
+    if existing:
+        return existing
+    user = User(
+        supabase_uid=payload.supabase_uid,
+        full_name=payload.full_name,
+        email=payload.email,
+        role="user",
+        designation=payload.designation,
+        is_approved=True,
     )
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
-            raise credentials_exception
-    except JWTError:
-        raise credentials_exception
-    user = db.query(User).filter(User.username == username).first()
-    if user is None:
-        raise credentials_exception
+    await user.insert()
     return user
 
-@router.get("/check-profile")
-def check_profile(email: str, db: Session = Depends(get_users_db)):
-    user = db.query(User).filter(User.email == email).first()
-    if not user or not user.is_profile_complete:
-        return {"is_complete": False}
-    
-    token = create_token({"sub": user.username})
-    return {
-        "is_complete": True,
-        "access_token": token,
-        "username": user.username,
-        "full_name": user.full_name
-    }
-    
-@router.post("/register")
-def register(req: RegisterRequest, db: Session = Depends(get_users_db)):
-    if len(req.password) > 72:
-        raise HTTPException(
-            status_code=400,
-            detail="Password must be 72 characters or fewer."
-        )
-    if db.query(User).filter(User.username == req.username).first():
-        raise HTTPException(status_code=400, detail="Username already registered")
-    user = User(username=req.username, hashed_password=hash_password(req.password))
-    db.add(user)
-    db.commit()
-    return {"message": "User registered successfully"}
 
-@router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_users_db)):
-    user = db.query(User).filter(User.username == form.username).first()
-    if not user or not verify_password(form.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Incorrect username or password")
-    token = create_token({"sub": user.username})
-    return {"access_token": token, "token_type": "bearer"}
+@router.post("/onboard", response_model=UserOut)
+async def onboard_user(payload: OnboardRequest):
+    """
+    Called right after Google sign-in, once the user has set their name and
+    password. Creates the account and activates it immediately — office
+    selection now happens when the user creates a PPMP, not here.
+    """
+    existing = await User.find_one(User.supabase_uid == payload.supabase_uid)
+    if existing:
+        raise HTTPException(status_code=400, detail="An account already exists for this sign-in")
 
-class CompleteProfileRequest(BaseModel):
-    full_name: str
-    username: str
-    password: str
-    email: str
-    google_id: str
+    user = User(
+        supabase_uid=payload.supabase_uid,
+        full_name=payload.full_name,
+        email=payload.email,
+        role="user",
+        is_approved=True,
+    )
+    await user.insert()
+    return user
 
-@router.post("/complete-profile")
-def complete_profile(req: CompleteProfileRequest, db: Session = Depends(get_users_db)):
-    # Check if username already taken
-    if db.query(User).filter(User.username == req.username).first():
-        raise HTTPException(status_code=400, detail="Username already taken")
-    
-    # Find user by email or create new
-    user = db.query(User).filter(User.email == req.email).first()
+
+@router.get("/me/{supabase_uid}", response_model=UserOut)
+async def get_me(supabase_uid: str):
+    user = await User.find_one(User.supabase_uid == supabase_uid)
     if not user:
-        user = User(email=req.email)
-        db.add(user)
-    
-    # Update profile
-    user.full_name = req.full_name
-    user.username = req.username
-    user.hashed_password = hash_password(req.password[:72])
-    user.google_id = req.google_id
-    user.is_profile_complete = True
-    db.commit()
-    
-    # Return JWT token
-    token = create_token({"sub": user.username})
-    return {"access_token": token, "token_type": "bearer"}
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
 
-class ResetPasswordRequest(BaseModel):
-    email: str
-    new_password: str
 
-@router.post("/reset-password")
-def reset_password(req: ResetPasswordRequest, db: Session = Depends(get_users_db)):
-    user = db.query(User).filter(User.email == req.email).first()
+@router.get("/me-by-id/{user_id}", response_model=UserOut)
+async def get_me_by_id(user_id: str):
+    """Fetch a user by internal Mongo id (used to resolve PPMP/APP/PR creators)."""
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found.")
-    if len(req.new_password) > 72:
-        raise HTTPException(status_code=400, detail="Password must be 72 characters or fewer.")
-    user.hashed_password = hash_password(req.new_password)
-    db.commit()
-    return {"message": "Password reset successfully."}
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+# ── Admin endpoints ──────────────────────────────────────────────────────────
+# Approval concept is gone, but role management / cleanup is still useful.
+
+@router.get("/users", response_model=List[UserOut])
+async def list_users(requester_uid: str, is_approved: Optional[bool] = None):
+    await require_admin(requester_uid)
+    if is_approved is not None:
+        return await User.find(User.is_approved == is_approved).to_list()
+    return await User.find_all().to_list()
+
+
+@router.put("/users/{user_id}", response_model=UserOut)
+async def update_user(user_id: str, payload: UserUpdate, requester_uid: str):
+    """Admin action: change role or make a correction. No approval gate anymore."""
+    await require_admin(requester_uid)
+
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    if payload.designation is not None:
+        user.designation = payload.designation
+    if payload.role is not None:
+        user.role = payload.role
+    if payload.is_approved is not None:
+        user.is_approved = payload.is_approved
+
+    await user.save()
+    return user
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, requester_uid: str):
+    """
+    Admin action: permanently delete a user account. Does NOT touch their
+    Supabase Auth account, so they can sign in and set up a new account.
+    """
+    requester = await require_admin(requester_uid)
+
+    if str(requester.id) == user_id:
+        raise HTTPException(status_code=400, detail="You can't delete your own account")
+
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await user.delete()
+    return {"message": f"User {user.email} deleted"}

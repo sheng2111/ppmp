@@ -1,71 +1,107 @@
-import React, {
+import {
   createContext,
   useContext,
-  useState,
   useEffect,
-  ReactNode,
+  useState,
+  useCallback,
+  useMemo,
 } from "react";
-import { login as apiLogin } from "../services/api";
+import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
+import { supabase } from "../lib/supabase";
+import api from "../services/api";
+import type { DBUser } from "../types";
 
 interface AuthContextType {
-  user: string | null;
-  fullName: string | null; // ✅ add
-  token: string | null;
-  isLoading: boolean;
-  login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  user: SupabaseUser | null;
+  dbUser: DBUser | null;
+  session: Session | null;
+  loading: boolean;
+  signInWithGoogle: () => Promise<void>;
+  signOut: () => Promise<void>;
+  refreshDbUser: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
-  const [user, setUser] = useState<string | null>(null);
-  const [token, setToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [fullName, setFullName] = useState<string | null>(null); // ✅
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [dbUser, setDbUser] = useState<DBUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const savedToken = localStorage.getItem("token");
-    const savedUser = localStorage.getItem("user");
-    const savedFullName = localStorage.getItem("full_name"); // ✅
-    if (savedToken && savedUser) {
-      setToken(savedToken);
-      setUser(savedUser);
+  // Checks whether a User row already exists for this Supabase account.
+  // Does NOT create one — that only happens when the onboarding form is submitted.
+  const fetchDbUser = useCallback(async (supabaseUser: SupabaseUser) => {
+    try {
+      const response = await api.get(`/auth/me/${supabaseUser.id}`);
+      setDbUser(response.data);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        // Not onboarded yet — this is expected for a brand-new sign-in.
+        setDbUser(null);
+      } else {
+        console.error("Failed to fetch user:", err);
+        setDbUser(null);
+      }
     }
-    if (savedFullName) setFullName(savedFullName); // ✅
-    setIsLoading(false);
   }, []);
 
-  const login = async (username: string, password: string) => {
-    const res = await apiLogin(username, password);
-    const { access_token } = res.data;
-    localStorage.setItem("token", access_token);
-    localStorage.setItem("user", username);
-    setToken(access_token);
-    setUser(username);
-  };
+  const refreshDbUser = useCallback(async () => {
+    if (user) await fetchDbUser(user);
+  }, [user, fetchDbUser]);
 
-  const logout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("user");
-    localStorage.removeItem("full_name"); // ✅
-    setToken(null);
-    setUser(null);
-    setFullName(null); // ✅
-  };
+  useEffect(() => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchDbUser(session.user);
+      }
+      setLoading(false);
+    });
 
-  return (
-    // ✅ add fullName to value
-    <AuthContext.Provider
-      value={{ user, fullName, token, isLoading, login, logout }}
-    >
-      {children}
-    </AuthContext.Provider>
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        await fetchDbUser(session.user);
+      } else {
+        setDbUser(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, [fetchDbUser]);
+
+  const signInWithGoogle = useCallback(async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: { redirectTo: window.location.origin },
+    });
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setDbUser(null);
+  }, []);
+
+  const value = useMemo(
+    () => ({
+      user,
+      dbUser,
+      session,
+      loading,
+      signInWithGoogle,
+      signOut,
+      refreshDbUser,
+    }),
+    [user, dbUser, session, loading, signInWithGoogle, signOut, refreshDbUser],
   );
-};
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error("useAuth must be inside AuthProvider");
-  return ctx;
-};
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export const useAuth = () => useContext(AuthContext);

@@ -1,34 +1,70 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .database import users_engine, ppmp_engine, UsersBase, PPMPBase
-from .routers import auth, ppmp
-from .database import users_engine, ppmp_engine, UsersBase, PPMPBase
-# Create all DB tables
+from contextlib import asynccontextmanager
+from app.services.database import init_db
+from app.routers import auth, offices, items, ppmps, app_routes, pr_routes, expense_categories, signatory_settings
+from app.routers import users
+from app.routers import ppmp_consolidation
+from app.routers import app_consolidation
+from app.routers import fee_categories
+from app.routers import reports_router  
+from app.routers import notifications
+from app.routers import admin_dashboard
+from app.models.app_meta import AppMeta, AppSignatory
 
-UsersBase.metadata.create_all(bind=users_engine)
-PPMPBase.metadata.create_all(bind=ppmp_engine)
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await init_db()
+    yield
 
-app = FastAPI(
-    title="PPMP System API",
-    description="Project Procurement Management Plan API",
-    version="1.0.0"
-)
 
-# CORS - allow React frontend
+app = FastAPI(title="e-PMS API", version="2.0.0", lifespan=lifespan)
+
+# Comma-separated list of allowed browser origins (e.g. your deployed
+# frontend URL). Falls back to the known production frontend when unset.
+# Local dev origins are always allowed.
+cors_origins = [
+    origin.strip().rstrip("/")
+    for origin in os.getenv(
+        "CORS_ORIGINS", "https://ppmp-mauve.vercel.app"
+    ).split(",")
+    if origin.strip()
+]
+
 app.add_middleware(
     CORSMiddleware,
+<<<<<<< HEAD
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000","http://192.168.2.2:3000","http://192.168.3.12:3000"],
+=======
+    allow_origins=cors_origins,
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+",
+>>>>>>> real
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Routers
-app.include_router(auth.router, prefix="/auth", tags=["Authentication"])
-app.include_router(ppmp.router, prefix="/ppmp", tags=["PPMP"])
+app.include_router(auth.router)
+app.include_router(offices.router)
+app.include_router(items.router)
+app.include_router(ppmps.router)
+app.include_router(app_routes.router)
+app.include_router(pr_routes.router)
+app.include_router(expense_categories.router)
+app.include_router(ppmp_consolidation.router)
+app.include_router(app_consolidation.router)
+app.include_router(fee_categories.router)
+app.include_router(reports_router.router)
+app.include_router(signatory_settings.router)
+app.include_router(notifications.router)
+app.include_router(admin_dashboard.router)
+app.include_router(users.router)
+
+
 @app.get("/")
 def root():
-    return {"message": "PPMP System API is running", "version": "1.0.0"}
+    return {"message": "e-PMS API is running"}
 
 
 @app.get("/health")

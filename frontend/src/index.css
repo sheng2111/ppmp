@@ -1,8 +1,72 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-body {
-  font-family: Arial, sans-serif;
-  background-color: #f5f7fa;
+/* ── Feedback system keyframes ─────────────────────────────────────── */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes toastIn {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes dialogIn {
+  0% { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Reduced motion — collapse all animations to instant state changes */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* PPMP table styles */
+.ppmp-th {
+  border: 1px solid #374151;
+  padding: 4px 6px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 600;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+
+.ppmp-td {
+  border: 1px solid #9ca3af;
+  padding: 4px 6px;
+  font-size: 10px;
+  vertical-align: top;
+  line-height: 1.4;
+}
+
+/* Print styles */
+@media print {
+  .print\:hidden { display: none !important; }
+
+  body { margin: 0; padding: 0; }
+
+  .ppmp-print {
+    padding: 10mm;
+    font-size: 9px;
+  }
+
+  .ppmp-th, .ppmp-td {
+    font-size: 8px;
+    padding: 2px 4px;
+  }
+
+  @page {
+    size: 13in 8.5in;
+    margin: 1in;
+  }
 }
