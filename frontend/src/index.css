@@ -1,5 +1,35 @@
 @import "tailwindcss";
 
+/* ── Feedback system keyframes ─────────────────────────────────────── */
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@keyframes toastIn {
+  0% { opacity: 0; transform: translateX(20px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes dialogIn {
+  0% { opacity: 0; transform: scale(0.96); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Reduced motion — collapse all animations to instant state changes */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /* PPMP table styles */
 .ppmp-th {
   border: 1px solid #374151;
@@ -36,7 +66,7 @@
   }
 
   @page {
-    size: A4 landscape;
-    margin: 10mm;
+    size: 13in 8.5in;
+    margin: 1in;
   }
 }

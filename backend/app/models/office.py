@@ -1,21 +1,16 @@
-from sqlalchemy import Column, Integer, String, DateTime
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.database import Base
+from beanie import Document, PydanticObjectId
+from pydantic import Field
+from typing import Optional
+from datetime import datetime
 
-class Office(Base):
-    __tablename__ = "offices"
 
-    id          = Column(Integer, primary_key=True, index=True)
-    name        = Column(String, nullable=False)
-    code        = Column(String, nullable=False, unique=True)
-    head_name   = Column(String)
-    designation = Column(String)
-    created_at  = Column(DateTime(timezone=True), server_default=func.now())
+class Office(Document):
+    name: str
+    head_name: Optional[str] = None
+    designation: Optional[str] = None
+    fund_source: Optional[str] = None  # "STF" or "Other School Fees"
+    parent_office_id: Optional[PydanticObjectId] = None  # set only for sub-offices
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
-    users = relationship(
-        "User",
-        secondary="user_offices",
-        back_populates="offices",
-    )
-    ppmps = relationship("PPMP", back_populates="office")
+    class Settings:
+        name = "offices"

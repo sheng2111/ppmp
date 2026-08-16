@@ -1,340 +1,829 @@
-import { useState, useEffect } from "react";
+import {
+  useState,
+  useEffect,
+  type JSXElementConstructor,
+  type Key,
+  type ReactElement,
+  type ReactNode,
+  type ReactPortal,
+} from "react";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
-import type { Office } from "../../types";
+import { useToast } from "../../components/feedback/ToastProvider";
+import { useConfirmState } from "../../components/feedback/useConfirm";
+import { ConfirmDialog } from "../../components/feedback/ConfirmDialog";
+import { LoadingButton } from "../../components/feedback/LoadingButton";
+import { EmptyState } from "../../components/feedback/EmptyState";
+import { SkeletonRow } from "../../components/feedback/Skeleton";
+// Local wrappers for fee-category API calls. The original project
+// exported these from services/feeCategoryApi; keep compatible
+// signatures here to avoid the missing-module error.
+export interface FeeCategoryOffice {
+  id: string;
+  name: string;
+  fee_category_id: string;
+  parent_office_id?: string | null;
+  children: FeeCategoryOffice[];
+}
+
+export interface FeeCategory {
+  id: string;
+  name: string;
+  offices: FeeCategoryOffice[];
+}
+
+const getFeeCategoryTree = async (): Promise<FeeCategory[]> => {
+  const res = await api.get("/fee-categories/tree");
+  return res.data;
+};
+
+const createFeeCategory = async (name: string, position?: number) => {
+  await api.post("/fee-categories", { name, position });
+};
+
+const updateFeeCategory = async (id: string, body: { name: string }) => {
+  await api.put(`/fee-categories/${id}`, body);
+};
+
+const deleteFeeCategory = async (id: string) => {
+  await api.delete(`/fee-categories/${id}`);
+};
+
+const createOffice = async (fee_category_id: string, body: any) => {
+  await api.post(`/fee-categories/${fee_category_id}/offices`, body);
+};
+
+const updateOffice = async (id: string, body: any) => {
+  await api.put(`/fee-categories/offices/${id}`, body);
+};
+
+const deleteOffice = async (id: string) => {
+  await api.delete(`/fee-categories/offices/${id}`);
+};
+import { Plus, Building2, Users, ChevronRight, FolderTree } from "lucide-react";
+import PageHeader from "../../components/layout/PageHeader";
 
 interface AdminUser {
-  id: number;
+  id: string;
   full_name: string;
   email: string;
   role: string;
-  designation: string | null;
-  is_approved: boolean;
-  offices: { id: number; name: string; code: string }[];
 }
 
+// Offices a user has actually used, derived from the PPMPs they've created —
+// not something an admin assigns anymore.
+interface UserOfficeUsage {
+  id: string;
+  name: string;
+}
+
+const INPUT =
+  "w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#009CC4]/40 focus:border-transparent transition";
+
+interface OfficeFormState {
+  name: string;
+  // Fixed for the lifetime of the modal — set when the form is opened from
+  // a specific Fee Category's "Add Office" / "Add sub-office" action. The
+  // API only supports creating an office under a category via
+  // POST /fee-categories/{category_id}/offices and never lets an existing
+  // office move to a different category, so there's no category picker
+  // inside this form — only "which category was this opened from".
+  fee_category_id: string;
+  parent_office_id: string;
+}
+
+const EMPTY_OFFICE_FORM: OfficeFormState = {
+  name: "",
+  fee_category_id: "",
+  parent_office_id: "",
+};
+
+interface CategoryFormState {
+  name: string;
+}
+
+const EMPTY_CATEGORY_FORM: CategoryFormState = { name: "" };
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
 export default function OfficesPage() {
   const { user: supabaseUser } = useAuth();
-  const [activeTab, setActiveTab] = useState<"offices" | "users">("offices");
+  const toast = useToast();
+  const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmState();
+  const [activeTab, setActiveTab] = useState<"feeCategories" | "users">(
+    "feeCategories",
+  );
 
-  // ── Offices state ──────────────────────────────────────────────────────────
-  const [offices, setOffices] = useState<Office[]>([]);
-  const [officesLoading, setOfficesLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [editTarget, setEditTarget] = useState<Office | null>(null);
-  const [officeForm, setOfficeForm] = useState({
-    name: "",
-    code: "",
-    head_name: "",
-    designation: "",
-  });
+  // ── Fee Categories + Offices state ────────────────────────────────────
+  const [categories, setCategories] = useState<FeeCategory[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+  const [showCategoryForm, setShowCategoryForm] = useState(false);
+  const [categoryEditTarget, setCategoryEditTarget] =
+    useState<FeeCategory | null>(null);
+  const [categoryForm, setCategoryForm] =
+    useState<CategoryFormState>(EMPTY_CATEGORY_FORM);
+  const [categorySaving, setCategorySaving] = useState(false);
+
+  const [showOfficeForm, setShowOfficeForm] = useState(false);
+  const [officeEditTarget, setOfficeEditTarget] =
+    useState<FeeCategoryOffice | null>(null);
+  const [officeForm, setOfficeForm] =
+    useState<OfficeFormState>(EMPTY_OFFICE_FORM);
   const [officeSaving, setOfficeSaving] = useState(false);
 
-  // ── Users state ────────────────────────────────────────────────────────────
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
-  const [usersError, setUsersError] = useState("");
-  const [userSubTab, setUserSubTab] = useState<"pending" | "active">("pending");
-  const [editUserId, setEditUserId] = useState<number | null>(null);
-  const [userEditForm, setUserEditForm] = useState({
-    designation: "",
-    role: "user",
-    office_ids: [] as number[],
-  });
+
+  // user_id -> offices they've used across their PPMPs
+  const [userOffices, setUserOffices] = useState<
+    Record<string, UserOfficeUsage[]>
+  >({});
+
+  const [editUserId, setEditUserId] = useState<string | null>(null);
+  const [roleForm, setRoleForm] = useState("user");
   const [userSaving, setUserSaving] = useState(false);
 
-  const fetchOffices = async () => {
+  const fetchCategories = async () => {
+    setCategoriesLoading(true);
     try {
-      const res = await api.get("/offices/");
-      setOffices(res.data);
+      const data = await getFeeCategoryTree();
+      setCategories(data);
     } finally {
-      setOfficesLoading(false);
+      setCategoriesLoading(false);
     }
   };
 
   const fetchUsers = async () => {
     if (!supabaseUser) return;
     setUsersLoading(true);
-    setUsersError("");
     try {
       const res = await api.get("/auth/users", {
         params: { requester_uid: supabaseUser.id },
       });
       setUsers(res.data);
+
+      try {
+        const officesRes = await api.get("/ppmps/offices-by-user", {
+          params: { requester_uid: supabaseUser.id },
+        });
+        setUserOffices(officesRes.data);
+      } catch {
+        setUserOffices({});
+      }
     } catch (err: any) {
-      setUsersError(err.response?.data?.detail || "Could not load users.");
+      toast.error(err.response?.data?.detail || "Could not load users.");
     } finally {
       setUsersLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchOffices();
+    fetchCategories();
   }, []);
   useEffect(() => {
     if (activeTab === "users") fetchUsers();
   }, [activeTab, supabaseUser]);
 
-  // ── Office CRUD ────────────────────────────────────────────────────────────
-  const openCreate = () => {
-    setEditTarget(null);
-    setOfficeForm({ name: "", code: "", head_name: "", designation: "" });
-    setShowForm(true);
+  // ── Fee Category CRUD ─────────────────────────────────────────────────
+
+  const openCreateCategory = () => {
+    setCategoryEditTarget(null);
+    setCategoryForm(EMPTY_CATEGORY_FORM);
+    setShowCategoryForm(true);
   };
 
-  const openEdit = (o: Office) => {
-    setEditTarget(o);
+  const openEditCategory = (c: FeeCategory) => {
+    setCategoryEditTarget(c);
+    setCategoryForm({ name: c.name });
+    setShowCategoryForm(true);
+  };
+
+  const handleCategorySave = async () => {
+    setCategorySaving(true);
+    try {
+      if (categoryEditTarget) {
+        await updateFeeCategory(categoryEditTarget.id, {
+          name: categoryForm.name,
+        });
+      } else {
+        await createFeeCategory(categoryForm.name, categories.length);
+      }
+      setShowCategoryForm(false);
+      toast.success(`Fee Category ${categoryEditTarget ? "updated" : "created"} successfully.`);
+      fetchCategories();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Could not save Fee Category.");
+    } finally {
+      setCategorySaving(false);
+    }
+  };
+
+  const handleCategoryDelete = async (c: FeeCategory) => {
+    if (!(await confirm({
+      title: "Delete Fee Category",
+      description: `Are you sure you want to delete "${c.name}"? This will also remove all offices under it. This action cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    }))) return;
+    try {
+      await deleteFeeCategory(c.id);
+      toast.success("Fee Category deleted successfully.");
+      fetchCategories();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Could not delete Fee Category.");
+    }
+  };
+
+  // ── Office CRUD ───────────────────────────────────────────────────────
+
+  const openCreateOffice = (category: FeeCategory) => {
+    setOfficeEditTarget(null);
+    setOfficeForm({
+      name: "",
+      fee_category_id: category.id,
+      parent_office_id: "",
+    });
+    setShowOfficeForm(true);
+  };
+
+  const openEditOffice = (category: FeeCategory, o: FeeCategoryOffice) => {
+    setOfficeEditTarget(o);
     setOfficeForm({
       name: o.name,
-      code: o.code,
-      head_name: o.head_name || "",
-      designation: o.designation || "",
+      fee_category_id: category.id,
+      parent_office_id: o.parent_office_id ?? "",
     });
-    setShowForm(true);
+    setShowOfficeForm(true);
+  };
+
+  const openAddSubOffice = (
+    category: FeeCategory,
+    parent: FeeCategoryOffice,
+  ) => {
+    setOfficeEditTarget(null);
+    setOfficeForm({
+      name: "",
+      fee_category_id: category.id,
+      parent_office_id: parent.id,
+    });
+    setShowOfficeForm(true);
   };
 
   const handleOfficeSave = async () => {
     setOfficeSaving(true);
     try {
-      if (editTarget) {
-        await api.put(`/offices/${editTarget.id}`, officeForm);
+      if (officeEditTarget) {
+        await updateOffice(officeEditTarget.id, {
+          name: officeForm.name,
+          parent_office_id: officeForm.parent_office_id || null,
+        });
       } else {
-        await api.post("/offices/", officeForm);
+        await createOffice(officeForm.fee_category_id, {
+          name: officeForm.name,
+          parent_office_id: officeForm.parent_office_id || null,
+        });
       }
-      setShowForm(false);
-      fetchOffices();
+      setShowOfficeForm(false);
+      toast.success(`Office ${officeEditTarget ? "updated" : "created"} successfully.`);
+      fetchCategories();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Could not save office.");
     } finally {
       setOfficeSaving(false);
     }
   };
 
-  const handleOfficeDelete = async (id: number) => {
-    if (!confirm("Delete this office?")) return;
-    await api.delete(`/offices/${id}`);
-    fetchOffices();
+  const handleOfficeDelete = async (o: any) => {
+    if (!(await confirm({
+      title: "Delete Office",
+      description: `Are you sure you want to delete "${o.name}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    }))) return;
+    try {
+      await deleteOffice(o.id);
+      toast.success("Office deleted successfully.");
+      fetchCategories();
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || "Could not delete office.");
+    }
   };
 
-  // ── User editing ───────────────────────────────────────────────────────────
   const openUserEdit = (u: AdminUser) => {
     setEditUserId(u.id);
-    setUserEditForm({
-      designation: u.designation || "",
-      role: u.role,
-      office_ids: u.offices.map((o) => o.id),
-    });
+    setRoleForm(u.role);
   };
 
-  const toggleOffice = (officeId: number) => {
-    setUserEditForm((prev) => ({
-      ...prev,
-      office_ids: prev.office_ids.includes(officeId)
-        ? prev.office_ids.filter((id) => id !== officeId)
-        : [...prev.office_ids, officeId],
-    }));
-  };
-
-  const saveUserEdit = async (userId: number) => {
+  const saveUserEdit = async (userId: string) => {
     if (!supabaseUser) return;
     setUserSaving(true);
     try {
       await api.put(
         `/auth/users/${userId}`,
-        {
-          designation: userEditForm.designation || null,
-          role: userEditForm.role,
-          office_ids: userEditForm.office_ids,
-        },
+        { role: roleForm },
         { params: { requester_uid: supabaseUser.id } },
       );
       setEditUserId(null);
+      toast.success("User role updated successfully.");
       fetchUsers();
     } catch (err: any) {
-      setUsersError(err.response?.data?.detail || "Could not update user.");
+      toast.error(err.response?.data?.detail || "Could not update user.");
     } finally {
       setUserSaving(false);
     }
   };
 
-  const approveUser = async (userId: number) => {
+  const deleteUser = async (u: AdminUser) => {
     if (!supabaseUser) return;
+    if (!(await confirm({
+      title: "Delete User",
+      description: `Are you sure you want to delete ${u.full_name} (${u.email})? This cannot be undone.`,
+      confirmLabel: "Delete",
+      tone: "danger",
+    }))) return;
     try {
-      await api.put(
-        `/auth/users/${userId}`,
-        { is_approved: true },
-        { params: { requester_uid: supabaseUser.id } },
-      );
+      await api.delete(`/auth/users/${u.id}`, {
+        params: { requester_uid: supabaseUser.id },
+      });
+      toast.success("User deleted successfully.");
       fetchUsers();
     } catch (err: any) {
-      setUsersError(err.response?.data?.detail || "Could not approve user.");
+      toast.error(err.response?.data?.detail || "Could not delete user.");
     }
   };
 
-  const pendingUsers = users.filter((u) => !u.is_approved);
-  const activeUsers = users.filter((u) => u.is_approved);
+  const thCls =
+    "text-left px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wide";
+  const tdCls = "px-4 py-3";
+
+  // Only top-level offices in the form's category are valid parents — the
+  // API only allows one level of sub-office nesting, and an office can't
+  // be its own parent.
+  const activeCategory = categories.find(
+    (c) => c.id === officeForm.fee_category_id,
+  );
+  const validParentOffices = (activeCategory?.offices ?? []).filter(
+    (o: { id: any }) => {
+      return o.id !== officeEditTarget?.id;
+    },
+  );
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h1 className="text-2xl font-semibold text-blue-900">
-            {activeTab === "offices" ? "Offices" : "Users"}
-          </h1>
-          <p className="text-gray-500 text-sm mt-1">
-            {activeTab === "offices"
-              ? "Manage university offices and departments"
-              : "Approve and manage user accounts"}
-          </p>
-        </div>
-        {activeTab === "offices" && (
-          <button
-            onClick={openCreate}
-            className="bg-blue-700 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-800 transition"
-          >
-            + Add Office
-          </button>
-        )}
-      </div>
+    <div style={{ fontFamily: "'Inter', 'DM Sans', system-ui, sans-serif" }}>
+      {/* ── Header ── */}
+      <PageHeader
+        title={activeTab === "feeCategories" ? "Fee Categories" : "Users"}
+        subtitle={
+          activeTab === "feeCategories"
+            ? "Manage fee categories and the offices/departments under them"
+            : "Manage user accounts and roles"
+        }
+        actions={
+          activeTab === "feeCategories" ? (
+            <button
+              onClick={openCreateCategory}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white rounded-lg transition hover:opacity-90 active:scale-95 bg-white/10 hover:bg-white/20"
+            >
+              <Plus className="w-4 h-4" /> Add Fee Category
+            </button>
+          ) : undefined
+        }
+      />
 
-      {/* Main tabs */}
-      <div className="flex gap-1 mb-5 border-b border-gray-200">
-        {(["offices", "users"] as const).map((tab) => (
+      {/* ── Main tabs ── */}
+      <div className="flex gap-0 mb-5 border-b border-gray-100">
+        {(
+          [
+            { key: "feeCategories", label: "Fee Categories", icon: FolderTree },
+            { key: "users", label: "Users", icon: Users },
+          ] as const
+        ).map(({ key, label, icon: Icon }) => (
           <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium border-b-2 transition capitalize ${
-              activeTab === tab
-                ? "border-blue-700 text-blue-800"
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`flex items-center gap-2 px-5 py-2.5 text-sm font-medium border-b-2 transition ${
+              activeTab === key
+                ? "border-[#009CC4] text-[#009CC4]"
                 : "border-transparent text-gray-400 hover:text-gray-600"
             }`}
           >
-            {tab}
-            {tab === "users" && pendingUsers.length > 0 && (
-              <span className="ml-2 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                {pendingUsers.length}
-              </span>
-            )}
+            <Icon className="w-4 h-4" />
+            {label}
           </button>
         ))}
       </div>
 
-      {/* ── OFFICES TAB ── */}
-      {activeTab === "offices" && (
+      {/* ── FEE CATEGORIES TAB ── */}
+      {activeTab === "feeCategories" && (
         <>
-          {officesLoading ? (
-            <p className="text-gray-400 text-sm">Loading...</p>
-          ) : offices.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-              <p className="text-gray-400 text-sm">No offices yet.</p>
+          {categoriesLoading ? (
+            <div className="space-y-4">
+              <SkeletonRow columns={3} />
+              <SkeletonRow columns={3} />
             </div>
+          ) : categories.length === 0 ? (
+            <EmptyState
+              title="No Fee Categories yet"
+              description="Create your first fee category to organize offices."
+              action={{ label: "Add Fee Category", onClick: openCreateCategory }}
+            />
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    {["Office", "Code", "Head", "Designation", ""].map((h) => (
-                      <th
-                        key={h}
-                        className="text-left px-4 py-3 text-gray-500 font-medium"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {offices.map((o) => (
-                    <tr key={o.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 font-medium text-gray-800">
-                        {o.name}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">{o.code}</td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {o.head_name || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-gray-500">
-                        {o.designation || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right space-x-2">
+            <div className="space-y-4">
+              {categories.map((category) => {
+                const officeCount = category.offices.reduce<number>(
+                  (n: number, o: { children: string | any[] }) =>
+                    n + 1 + o.children.length,
+                  0,
+                );
+                return (
+                  <div
+                    key={category.id}
+                    className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm"
+                  >
+                    <div
+                      className="flex items-center justify-between px-4 py-3 border-b border-gray-100"
+                      style={{ background: "#F7FAFD" }}
+                    >
+                      <div className="flex items-center gap-2">
+                        <FolderTree
+                          className="w-4 h-4"
+                          style={{ color: "#009CC4" }}
+                        />
+                        <span
+                          className="text-sm font-semibold"
+                          style={{ color: "#061451" }}
+                        >
+                          {category.name}
+                        </span>
+                        <span className="text-xs text-gray-400">
+                          {officeCount} office{officeCount !== 1 ? "s" : ""}
+                        </span>
+                      </div>
+                      <div className="space-x-3">
                         <button
-                          onClick={() => openEdit(o)}
-                          className="text-blue-600 hover:underline text-xs"
+                          onClick={() => openCreateOffice(category)}
+                          className="text-xs font-medium transition hover:opacity-70"
+                          style={{ color: "#009CC4" }}
+                        >
+                          Add Office
+                        </button>
+                        <button
+                          onClick={() => openEditCategory(category)}
+                          className="text-xs font-medium transition hover:opacity-70"
+                          style={{ color: "#009CC4" }}
                         >
                           Edit
                         </button>
                         <button
-                          onClick={() => handleOfficeDelete(o.id)}
-                          className="text-red-500 hover:underline text-xs"
+                          onClick={() => handleCategoryDelete(category)}
+                          className="text-xs font-medium text-red-400 hover:text-red-600 transition"
                         >
                           Delete
                         </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </div>
+                    </div>
+
+                    {category.offices.length === 0 ? (
+                      <p className="px-4 py-4 text-sm text-gray-400">
+                        No offices under this category yet.
+                      </p>
+                    ) : (
+                      <table className="w-full text-sm">
+                        <thead className="border-b border-gray-50">
+                          <tr>
+                            {["Office", ""].map((h) => (
+                              <th key={h} className={thCls}>
+                                {h}
+                              </th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {category.offices.map(
+                            (o: {
+                              id: Key | null | undefined;
+                              name:
+                                | string
+                                | number
+                                | bigint
+                                | boolean
+                                | ReactElement<
+                                    unknown,
+                                    string | JSXElementConstructor<any>
+                                  >
+                                | Iterable<ReactNode>
+                                | ReactPortal
+                                | Promise<
+                                    | string
+                                    | number
+                                    | bigint
+                                    | boolean
+                                    | ReactPortal
+                                    | ReactElement<
+                                        unknown,
+                                        string | JSXElementConstructor<any>
+                                      >
+                                    | Iterable<ReactNode>
+                                    | null
+                                    | undefined
+                                  >
+                                | null
+                                | undefined;
+                              children: {
+                                id: Key | null | undefined;
+                                name:
+                                  | string
+                                  | number
+                                  | bigint
+                                  | boolean
+                                  | ReactElement<
+                                      unknown,
+                                      string | JSXElementConstructor<any>
+                                    >
+                                  | Iterable<ReactNode>
+                                  | ReactPortal
+                                  | Promise<
+                                      | string
+                                      | number
+                                      | bigint
+                                      | boolean
+                                      | ReactPortal
+                                      | ReactElement<
+                                          unknown,
+                                          string | JSXElementConstructor<any>
+                                        >
+                                      | Iterable<ReactNode>
+                                      | null
+                                      | undefined
+                                    >
+                                  | null
+                                  | undefined;
+                              }[];
+                            }) => (
+                              <>
+                                <tr
+                                  key={o.id}
+                                  className="hover:bg-[#F0F8FC]/50 transition-colors"
+                                >
+                                  <td
+                                    className={
+                                      tdCls + " font-medium text-gray-800"
+                                    }
+                                  >
+                                    {o.name}
+                                  </td>
+                                  <td
+                                    className={tdCls + " text-right space-x-3"}
+                                  >
+                                    <button
+                                      onClick={() =>
+                                        openAddSubOffice(category, {
+                                          ...(o as FeeCategoryOffice),
+                                          fee_category_id: category.id,
+                                        })
+                                      }
+                                      className="text-xs font-medium transition hover:opacity-70"
+                                      style={{ color: "#009CC4" }}
+                                    >
+                                      Add sub-office
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        openEditOffice(category, {
+                                          ...(o as FeeCategoryOffice),
+                                          fee_category_id: category.id,
+                                        })
+                                      }
+                                      className="text-xs font-medium transition hover:opacity-70"
+                                      style={{ color: "#009CC4" }}
+                                    >
+                                      Edit
+                                    </button>
+                                    <button
+                                      onClick={() => handleOfficeDelete(o)}
+                                      className="text-xs font-medium text-red-400 hover:text-red-600 transition"
+                                    >
+                                      Delete
+                                    </button>
+                                  </td>
+                                </tr>
+                                {o.children.map(
+                                  (child: {
+                                    id: Key | null | undefined;
+                                    name:
+                                      | string
+                                      | number
+                                      | bigint
+                                      | boolean
+                                      | ReactElement<
+                                          unknown,
+                                          string | JSXElementConstructor<any>
+                                        >
+                                      | Iterable<ReactNode>
+                                      | ReactPortal
+                                      | Promise<
+                                          | string
+                                          | number
+                                          | bigint
+                                          | boolean
+                                          | ReactPortal
+                                          | ReactElement<
+                                              unknown,
+                                              | string
+                                              | JSXElementConstructor<any>
+                                            >
+                                          | Iterable<ReactNode>
+                                          | null
+                                          | undefined
+                                        >
+                                      | null
+                                      | undefined;
+                                  }) => (
+                                    <tr
+                                      key={child.id}
+                                      className="hover:bg-[#F0F8FC]/50 transition-colors bg-gray-50/40"
+                                    >
+                                      <td
+                                        className={
+                                          tdCls +
+                                          " text-gray-600 pl-8 flex items-center gap-1.5"
+                                        }
+                                      >
+                                        <ChevronRight className="w-3.5 h-3.5 text-gray-300" />
+                                        {child.name}
+                                      </td>
+                                      <td
+                                        className={
+                                          tdCls + " text-right space-x-3"
+                                        }
+                                      >
+                                        <button
+                                          onClick={() =>
+                                            openEditOffice(category, child as FeeCategoryOffice)
+                                          }
+                                          className="text-xs font-medium transition hover:opacity-70"
+                                          style={{ color: "#009CC4" }}
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={() =>
+                                            handleOfficeDelete(child)
+                                          }
+                                          className="text-xs font-medium text-red-400 hover:text-red-600 transition"
+                                        >
+                                          Delete
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ),
+                                )}
+                              </>
+                            ),
+                          )}
+                        </tbody>
+                      </table>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           )}
 
-          {showForm && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl shadow-xl p-6 w-full max-w-md">
-                <h2 className="text-lg font-semibold text-blue-900 mb-4">
-                  {editTarget ? "Edit Office" : "Add Office"}
-                </h2>
-                <div className="space-y-3">
-                  {[
-                    {
-                      label: "Office name",
-                      key: "name",
-                      placeholder:
-                        "e.g. College of Information and Computing Technology",
-                    },
-                    { label: "Code", key: "code", placeholder: "e.g. CICT" },
-                    {
-                      label: "Office head name",
-                      key: "head_name",
-                      placeholder: "e.g. Juan Dela Cruz",
-                    },
-                    {
-                      label: "Designation",
-                      key: "designation",
-                      placeholder: "e.g. Dean",
-                    },
-                  ].map(({ label, key, placeholder }) => (
-                    <div key={key}>
-                      <label className="text-xs text-gray-500 mb-1 block">
-                        {label}
-                      </label>
-                      <input
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                        value={officeForm[key as keyof typeof officeForm]}
-                        onChange={(e) =>
-                          setOfficeForm({
-                            ...officeForm,
-                            [key]: e.target.value,
-                          })
-                        }
-                        placeholder={placeholder}
-                      />
-                    </div>
-                  ))}
+          {/* Fee Category modal */}
+          {showCategoryForm && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-gray-100">
+                <div className="flex items-center gap-3 mb-5">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: "rgba(0,156,196,0.1)" }}
+                  >
+                    <FolderTree
+                      className="w-4 h-4"
+                      style={{ color: "#009CC4" }}
+                    />
+                  </div>
+                  <h2
+                    className="text-base font-semibold"
+                    style={{ color: "#061451" }}
+                  >
+                    {categoryEditTarget
+                      ? "Edit Fee Category"
+                      : "Add Fee Category"}
+                  </h2>
                 </div>
-                <div className="flex justify-end gap-2 mt-6">
+                <div>
+                  <label className="text-xs font-medium text-gray-500 mb-1.5 block">
+                    Category name
+                  </label>
+                  <input
+                    className={INPUT}
+                    value={categoryForm.name}
+                    onChange={(e) => setCategoryForm({ name: e.target.value })}
+                    placeholder="e.g. Laboratory Fees"
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
                   <button
-                    onClick={() => setShowForm(false)}
-                    className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700"
+                    onClick={() => setShowCategoryForm(false)}
+                    className="px-4 py-2 text-sm text-gray-400 hover:text-gray-600 transition"
                   >
                     Cancel
                   </button>
-                  <button
-                    onClick={handleOfficeSave}
-                    disabled={
-                      officeSaving || !officeForm.name || !officeForm.code
-                    }
-                    className="px-4 py-2 bg-blue-700 text-white text-sm rounded-lg hover:bg-blue-800 disabled:opacity-50 transition"
+                  <LoadingButton
+                    onClick={handleCategorySave}
+                    disabled={!categoryForm.name}
+                    busy={categorySaving}
+                    busyLabel="Saving..."
                   >
-                    {officeSaving ? "Saving..." : "Save"}
+                    Save
+                  </LoadingButton>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Office modal */}
+          {showOfficeForm && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm flex items-center justify-center z-50">
+              <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md border border-gray-100">
+                <div className="flex items-center gap-3 mb-5">
+                  <div
+                    className="w-8 h-8 rounded-lg flex items-center justify-center"
+                    style={{ background: "rgba(0,156,196,0.1)" }}
+                  >
+                    <Building2
+                      className="w-4 h-4"
+                      style={{ color: "#009CC4" }}
+                    />
+                  </div>
+                  <div>
+                    <h2
+                      className="text-base font-semibold"
+                      style={{ color: "#061451" }}
+                    >
+                      {officeEditTarget ? "Edit Office" : "Add Office"}
+                    </h2>
+                    <p className="text-xs text-gray-400">
+                      {activeCategory?.name}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">
+                      Office name
+                    </label>
+                    <input
+                      className={INPUT}
+                      value={officeForm.name}
+                      onChange={(e) =>
+                        setOfficeForm({ ...officeForm, name: e.target.value })
+                      }
+                      placeholder="e.g. CITE/BSCS"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-gray-500 mb-1.5 block">
+                      Parent office (optional)
+                    </label>
+                    <select
+                      className={INPUT}
+                      value={officeForm.parent_office_id}
+                      onChange={(e) =>
+                        setOfficeForm({
+                          ...officeForm,
+                          parent_office_id: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">— Top-level office —</option>
+                      {validParentOffices.map((o) => (
+                        <option key={o.id} value={o.id}>
+                          {o.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end gap-2 mt-6 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => setShowOfficeForm(false)}
+                    className="px-4 py-2 text-sm text-gray-400 hover:text-gray-600 transition"
+                  >
+                    Cancel
                   </button>
+                  <LoadingButton
+                    onClick={handleOfficeSave}
+                    disabled={!officeForm.name}
+                    busy={officeSaving}
+                    busyLabel="Saving..."
+                  >
+                    Save
+                  </LoadingButton>
                 </div>
               </div>
             </div>
@@ -345,231 +834,138 @@ export default function OfficesPage() {
       {/* ── USERS TAB ── */}
       {activeTab === "users" && (
         <>
-          {usersError && (
-            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-4">
-              {usersError}
-            </div>
-          )}
-
-          {/* User sub-tabs */}
-          <div className="flex gap-1 mb-4">
-            <button
-              onClick={() => setUserSubTab("pending")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${
-                userSubTab === "pending"
-                  ? "bg-yellow-100 text-yellow-800"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
-            >
-              Pending Approval
-              {pendingUsers.length > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-                  {pendingUsers.length}
-                </span>
-              )}
-            </button>
-            <button
-              onClick={() => setUserSubTab("active")}
-              className={`px-3 py-1.5 text-xs font-medium rounded-lg transition ${
-                userSubTab === "active"
-                  ? "bg-blue-100 text-blue-800"
-                  : "text-gray-400 hover:text-gray-600"
-              }`}
-            >
-              Active Users ({activeUsers.length})
-            </button>
-          </div>
-
           {usersLoading ? (
-            <p className="text-gray-400 text-sm">Loading...</p>
-          ) : userSubTab === "pending" ? (
-            pendingUsers.length === 0 ? (
-              <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-                <p className="text-gray-400 text-sm">No pending accounts.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      {["Name", "Email", "Signed up", ""].map((h) => (
-                        <th
-                          key={h}
-                          className="text-left px-4 py-3 text-gray-500 font-medium"
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {pendingUsers.map((u) => (
-                      <tr key={u.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">
-                          {u.full_name}
-                        </td>
-                        <td className="px-4 py-3 text-gray-500">{u.email}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">
-                          Awaiting approval
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            onClick={() => approveUser(u.id)}
-                            className="bg-green-600 text-white text-xs px-3 py-1.5 rounded-lg hover:bg-green-700 transition"
-                          >
-                            Approve
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )
-          ) : activeUsers.length === 0 ? (
-            <div className="bg-white rounded-xl border border-gray-200 p-12 text-center">
-              <p className="text-gray-400 text-sm">No active users yet.</p>
+            <div className="space-y-4">
+              <SkeletonRow columns={5} />
+              <SkeletonRow columns={5} />
             </div>
+          ) : users.length === 0 ? (
+            <EmptyState
+              title="No users yet"
+              description="No user accounts have been registered yet."
+            />
           ) : (
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
               <table className="w-full text-sm">
-                <thead className="bg-gray-50 border-b border-gray-200">
+                <thead
+                  style={{ background: "#F7FAFD" }}
+                  className="border-b border-gray-100"
+                >
                   <tr>
-                    {[
-                      "Name",
-                      "Email",
-                      "Designation",
-                      "Role",
-                      "Offices",
-                      "",
-                    ].map((h) => (
-                      <th
-                        key={h}
-                        className="text-left px-4 py-3 text-gray-500 font-medium"
-                      >
+                    {["Name", "Email", "Role", "Offices used", ""].map((h) => (
+                      <th key={h} className={thCls}>
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {activeUsers.map((u) =>
+                <tbody className="divide-y divide-gray-50">
+                  {users.map((u) =>
                     editUserId === u.id ? (
-                      <tr key={u.id} className="bg-blue-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">
+                      <tr key={u.id} className="bg-[#F0F8FC]">
+                        <td className={tdCls + " font-medium text-gray-800"}>
                           {u.full_name}
                         </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">
+                        <td className={tdCls + " text-gray-400 text-xs"}>
                           {u.email}
                         </td>
-                        <td className="px-4 py-3">
-                          <input
-                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={userEditForm.designation}
-                            onChange={(e) =>
-                              setUserEditForm({
-                                ...userEditForm,
-                                designation: e.target.value,
-                              })
-                            }
-                            placeholder="e.g. Staff, Dean"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
+                        <td className={tdCls}>
                           <select
-                            className="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={userEditForm.role}
-                            onChange={(e) =>
-                              setUserEditForm({
-                                ...userEditForm,
-                                role: e.target.value,
-                              })
-                            }
+                            className="w-full border border-gray-200 rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-[#009CC4]/40 bg-white"
+                            value={roleForm}
+                            onChange={(e) => setRoleForm(e.target.value)}
                           >
                             <option value="user">user</option>
                             <option value="admin">admin</option>
                           </select>
                         </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap gap-1.5">
-                            {offices.map((o) => (
-                              <button
-                                key={o.id}
-                                type="button"
-                                onClick={() => toggleOffice(o.id)}
-                                className={`text-xs px-2 py-1 rounded-full border transition ${
-                                  userEditForm.office_ids.includes(o.id)
-                                    ? "bg-blue-700 text-white border-blue-700"
-                                    : "bg-white text-gray-600 border-gray-300 hover:border-blue-400"
-                                }`}
-                              >
-                                {o.code}
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-right space-x-2 whitespace-nowrap">
+                        <td className={tdCls + " text-gray-300 text-xs"}>—</td>
+                        <td
+                          className={
+                            tdCls + " text-right space-x-2 whitespace-nowrap"
+                          }
+                        >
                           <button
                             onClick={() => saveUserEdit(u.id)}
                             disabled={userSaving}
-                            className="text-blue-600 hover:underline text-xs disabled:opacity-50"
+                            className="text-xs font-semibold disabled:opacity-50 transition hover:opacity-70"
+                            style={{ color: "#009CC4" }}
                           >
-                            {userSaving ? "Saving..." : "Save"}
+                            {userSaving ? "Saving…" : "Save"}
                           </button>
                           <button
                             onClick={() => setEditUserId(null)}
-                            className="text-gray-400 hover:underline text-xs"
+                            className="text-xs text-gray-400 hover:text-gray-600 transition"
                           >
                             Cancel
                           </button>
                         </td>
                       </tr>
                     ) : (
-                      <tr key={u.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-800">
+                      <tr
+                        key={u.id}
+                        className="hover:bg-[#F0F8FC]/50 transition-colors"
+                      >
+                        <td className={tdCls + " font-medium text-gray-800"}>
                           {u.full_name}
                         </td>
-                        <td className="px-4 py-3 text-gray-500 text-xs">
+                        <td className={tdCls + " text-gray-400 text-xs"}>
                           {u.email}
                         </td>
-                        <td className="px-4 py-3 text-gray-500">
-                          {u.designation || "—"}
-                        </td>
-                        <td className="px-4 py-3">
+                        <td className={tdCls}>
                           <span
-                            className={`text-xs px-2 py-1 rounded-full font-medium capitalize ${
+                            className="text-xs px-2.5 py-1 rounded-full font-semibold capitalize"
+                            style={
                               u.role === "admin"
-                                ? "bg-blue-100 text-blue-700"
-                                : "bg-gray-100 text-gray-600"
-                            }`}
+                                ? {
+                                    background: "rgba(6,20,81,0.08)",
+                                    color: "#061451",
+                                  }
+                                : { background: "#F3F4F6", color: "#6B7280" }
+                            }
                           >
                             {u.role}
                           </span>
                         </td>
-                        <td className="px-4 py-3">
+                        <td className={tdCls}>
                           <div className="flex flex-wrap gap-1">
-                            {u.offices.length > 0 ? (
-                              u.offices.map((o) => (
+                            {(userOffices[u.id]?.length ?? 0) > 0 ? (
+                              userOffices[u.id].map((o) => (
                                 <span
                                   key={o.id}
-                                  className="text-xs bg-blue-50 text-blue-700 px-2 py-0.5 rounded-full"
+                                  className="text-xs px-2 py-0.5 rounded-full font-medium"
+                                  style={{
+                                    background: "rgba(0,156,196,0.1)",
+                                    color: "#009CC4",
+                                  }}
                                 >
-                                  {o.code}
+                                  {o.name}
                                 </span>
                               ))
                             ) : (
-                              <span className="text-xs text-gray-400">
-                                None assigned
+                              <span className="text-xs text-gray-300">
+                                No PPMPs yet
                               </span>
                             )}
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-right">
+                        <td
+                          className={
+                            tdCls + " text-right whitespace-nowrap space-x-3"
+                          }
+                        >
                           <button
                             onClick={() => openUserEdit(u)}
-                            className="text-blue-600 hover:underline text-xs"
+                            className="text-xs font-medium transition hover:opacity-70"
+                            style={{ color: "#009CC4" }}
                           >
-                            Edit
+                            Edit role
+                          </button>
+                          <button
+                            onClick={() => deleteUser(u)}
+                            className="text-xs font-medium text-red-400 hover:text-red-600 transition"
+                          >
+                            Delete
                           </button>
                         </td>
                       </tr>
@@ -581,6 +977,13 @@ export default function OfficesPage() {
           )}
         </>
       )}
+
+      {/* Global confirmation dialog */}
+      <ConfirmDialog
+        state={confirmState}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
     </div>
   );
 }

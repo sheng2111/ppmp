@@ -1,4 +1,5 @@
 import axios from "axios";
+import { supabase } from "../lib/supabase";
 
 const getBaseURL = () => {
   if (window.location.hostname === "localhost") {
@@ -9,9 +10,17 @@ const getBaseURL = () => {
 
 const api = axios.create({
   baseURL: getBaseURL(),
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
+});
+
+api.interceptors.request.use(async (config) => {
+  const {
+    data: { session },
+  } = await supabase.auth.getSession();
+  if (session?.access_token) {
+    config.headers.Authorization = `Bearer ${session.access_token}`;
+  }
+  return config;
 });
 
 export default api;

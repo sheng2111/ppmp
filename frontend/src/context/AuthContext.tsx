@@ -1,4 +1,11 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from "react";
 import type { Session, User as SupabaseUser } from "@supabase/supabase-js";
 import { supabase } from "../lib/supabase";
 import api from "../services/api";
@@ -22,28 +29,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const syncUser = async (supabaseUser: SupabaseUser) => {
+  // Checks whether a User row already exists for this Supabase account.
+  // Does NOT create one — that only happens when the onboarding form is submitted.
+  const fetchDbUser = useCallback(async (supabaseUser: SupabaseUser) => {
     try {
-      const response = await api.post("/auth/register", {
-        supabase_uid: supabaseUser.id,
-        full_name: supabaseUser.user_metadata?.full_name || supabaseUser.email,
-        email: supabaseUser.email,
-      });
+      const response = await api.get(`/auth/me/${supabaseUser.id}`);
       setDbUser(response.data);
-    } catch (err) {
-      console.error("Failed to sync user:", err);
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        // Not onboarded yet — this is expected for a brand-new sign-in.
+        setDbUser(null);
+      } else {
+        console.error("Failed to fetch user:", err);
+        setDbUser(null);
+      }
     }
-  };
+  }, []);
 
-  const refreshDbUser = async () => {
-    if (user) await syncUser(user);
-  };
+  const refreshDbUser = useCallback(async () => {
+    if (user) await fetchDbUser(user);
+  }, [user, fetchDbUser]);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) syncUser(session.user);
+      if (session?.user) {
+        await fetchDbUser(session.user);
+      }
       setLoading(false);
     });
 
@@ -52,40 +65,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange(async (_event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) await syncUser(session.user);
+      if (session?.user) {
+        await fetchDbUser(session.user);
+      } else {
+        setDbUser(null);
+      }
       setLoading(false);
     });
 
     return () => subscription.unsubscribe();
-  }, []);
+  }, [fetchDbUser]);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
       options: { redirectTo: window.location.origin },
     });
-  };
+  }, []);
 
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setDbUser(null);
-  };
+  }, []);
 
-  return (
-    <AuthContext.Provider
-      value={{
-        user,
-        dbUser,
-        session,
-        loading,
-        signInWithGoogle,
-        signOut,
-        refreshDbUser,
-      }}
-    >
-      {children}
-    </AuthContext.Provider>
+  const value = useMemo(
+    () => ({
+      user,
+      dbUser,
+      session,
+      loading,
+      signInWithGoogle,
+      signOut,
+      refreshDbUser,
+    }),
+    [user, dbUser, session, loading, signInWithGoogle, signOut, refreshDbUser],
   );
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export const useAuth = () => useContext(AuthContext);

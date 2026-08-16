@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException
+from beanie import PydanticObjectId
+from beanie.operators import In
 from typing import List, Optional
-from app.database import get_db
-from app.models.user import User, UserOffice
-from app.models.office import Office
-from app.schemas.user import UserCreate, UserOut, UserUpdate
+
+from app.models.user import User
+from app.schemas.user import UserCreate, UserOut, UserUpdate, OnboardRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-def require_admin(requester_uid: str, db: Session) -> User:
-    requester = db.query(User).filter(User.supabase_uid == requester_uid).first()
+async def require_admin(requester_uid: str) -> User:
+    requester = await User.find_one(User.supabase_uid == requester_uid)
     if not requester or requester.role != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     return requester
@@ -20,63 +19,87 @@ def require_admin(requester_uid: str, db: Session) -> User:
 # ── Public / self endpoints ──────────────────────────────────────────────────
 
 @router.post("/register", response_model=UserOut)
-def register_user(payload: UserCreate, db: Session = Depends(get_db)):
-    """Called by frontend after Google sign-in. Creates User row if not exists."""
-    existing = db.query(User).filter(User.supabase_uid == payload.supabase_uid).first()
+async def register_user(payload: UserCreate):
+    """Legacy endpoint — creates a bare User. Kept for backward compatibility."""
+    existing = await User.find_one(User.supabase_uid == payload.supabase_uid)
     if existing:
         return existing
     user = User(
         supabase_uid=payload.supabase_uid,
         full_name=payload.full_name,
         email=payload.email,
-        role="user",           # always start as user, admin promotes manually
+        role="user",
         designation=payload.designation,
-        is_approved=False,     # always start unapproved, admin approves manually
+        is_approved=True,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
+    await user.insert()
+    return user
+
+
+@router.post("/onboard", response_model=UserOut)
+async def onboard_user(payload: OnboardRequest):
+    """
+    Called right after Google sign-in, once the user has set their name and
+    password. Creates the account and activates it immediately — office
+    selection now happens when the user creates a PPMP, not here.
+    """
+    existing = await User.find_one(User.supabase_uid == payload.supabase_uid)
+    if existing:
+        raise HTTPException(status_code=400, detail="An account already exists for this sign-in")
+
+    user = User(
+        supabase_uid=payload.supabase_uid,
+        full_name=payload.full_name,
+        email=payload.email,
+        role="user",
+        is_approved=True,
+    )
+    await user.insert()
     return user
 
 
 @router.get("/me/{supabase_uid}", response_model=UserOut)
-def get_me(supabase_uid: str, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.supabase_uid == supabase_uid).first()
+async def get_me(supabase_uid: str):
+    user = await User.find_one(User.supabase_uid == supabase_uid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
+@router.get("/me-by-id/{user_id}", response_model=UserOut)
+async def get_me_by_id(user_id: str):
+    """Fetch a user by internal Mongo id (used to resolve PPMP/APP/PR creators)."""
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     return user
 
 
 # ── Admin endpoints ──────────────────────────────────────────────────────────
+# Approval concept is gone, but role management / cleanup is still useful.
 
 @router.get("/users", response_model=List[UserOut])
-def list_users(
-    requester_uid: str,
-    is_approved: Optional[bool] = None,
-    db: Session = Depends(get_db),
-):
-    """List all users. Filter by is_approved=false for pending queue."""
-    require_admin(requester_uid, db)
-    query = db.query(User)
+async def list_users(requester_uid: str, is_approved: Optional[bool] = None):
+    await require_admin(requester_uid)
     if is_approved is not None:
-        query = query.filter(User.is_approved == is_approved)
-    return query.all()
+        return await User.find(User.is_approved == is_approved).to_list()
+    return await User.find_all().to_list()
 
 
 @router.put("/users/{user_id}", response_model=UserOut)
-def update_user(
-    user_id: int,
-    payload: UserUpdate,
-    requester_uid: str,
-    db: Session = Depends(get_db),
-):
-    """
-    Admin action: update designation, role, is_approved, and/or office assignments.
-    Sending office_ids replaces all current office assignments for that user.
-    """
-    require_admin(requester_uid, db)
+async def update_user(user_id: str, payload: UserUpdate, requester_uid: str):
+    """Admin action: change role or make a correction. No approval gate anymore."""
+    await require_admin(requester_uid)
 
-    user = db.query(User).filter(User.id == user_id).first()
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -87,19 +110,28 @@ def update_user(
     if payload.is_approved is not None:
         user.is_approved = payload.is_approved
 
-    # Replace office assignments if provided
-    if payload.office_ids is not None:
-        # Delete existing assignments
-        db.query(UserOffice).filter(UserOffice.user_id == user_id).delete()
-        # Insert new ones
-        for office_id in payload.office_ids:
-            office = db.query(Office).filter(Office.id == office_id).first()
-            if not office:
-                raise HTTPException(
-                    status_code=404, detail=f"Office id={office_id} not found"
-                )
-            db.add(UserOffice(user_id=user_id, office_id=office_id))
-
-    db.commit()
-    db.refresh(user)
+    await user.save()
     return user
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: str, requester_uid: str):
+    """
+    Admin action: permanently delete a user account. Does NOT touch their
+    Supabase Auth account, so they can sign in and set up a new account.
+    """
+    requester = await require_admin(requester_uid)
+
+    if str(requester.id) == user_id:
+        raise HTTPException(status_code=400, detail="You can't delete your own account")
+
+    try:
+        oid = PydanticObjectId(user_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="User not found")
+    user = await User.get(oid)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    await user.delete()
+    return {"message": f"User {user.email} deleted"}

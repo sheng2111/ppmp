@@ -1,64 +1,105 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.database import Base
-
-class PPMP(Base):
-    __tablename__ = "ppmps"
-
-    id           = Column(Integer, primary_key=True, index=True)
-    office_id    = Column(Integer, ForeignKey("offices.id"), nullable=False)
-    created_by   = Column(Integer, ForeignKey("users.id"), nullable=False)
-    year         = Column(Integer, nullable=False)
-    ppmp_no      = Column(String)                    # e.g. "1", "2"
-    ppmp_type    = Column(String, default="indicative")  # indicative | final
-    status       = Column(String, default="draft")   # draft | submitted | approved | rejected
-    remarks      = Column(String)
-    submitted_at = Column(DateTime(timezone=True))
-    created_at   = Column(DateTime(timezone=True), server_default=func.now())
-
-    office          = relationship("Office", back_populates="ppmps")
-    created_by_user = relationship("User", back_populates="ppmps")
-    projects        = relationship("PPMPProject", back_populates="ppmp", cascade="all, delete")
+from beanie import Document
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+from uuid import uuid4
 
 
+class PPMPEntryItem(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))  # stable id so a PR can reference this exact item
+    item_name: str
+    quantity: float = 0
+    unit: str
+    unit_price: float = 0
+    total_cost: float = 0
+    q1_qty: float = 0
+    q2_qty: float = 0
+    q3_qty: float = 0
+    q4_qty: float = 0
+    # ADDED — the item's Category as selected in Create/EditPPMPPage
+    # (General Requirements / Miscellaneous Items / Common Use Supplies and
+    # Equipment (CSE)). Previously collected on the frontend but never
+    # persisted anywhere; needed so the generated APP can band rows under
+    # the official category headers.
+    category: Optional[str] = None
+    # ADDED — client requirement: an item can be "non-procurable" (e.g. an
+    # item already covered elsewhere, or informational-only). Non-procurable
+    # items must still show up in the PPMP itself and in a PR, but must be
+    # excluded from the generated APP. Defaults to True so every existing
+    # item in the database (which predates this field) is read as
+    # procurable with no backfill needed.
+    is_procurable: bool = True
 
-class PPMPProject(Base):
-    """
-    One procurement project row in the PPMP.
-    A project can have multiple lots (PPMPLot).
-    Column 1 = description, Col 2 = project_type, etc.
-    """
-    __tablename__ = "ppmp_projects"
 
-    id                  = Column(Integer, primary_key=True, index=True)
-    ppmp_id             = Column(Integer, ForeignKey("ppmps.id"), nullable=False)
-    order_no            = Column(Integer, default=1)
-    description         = Column(Text, nullable=False)   # Col 1
-    project_type        = Column(String, default="Goods") # Col 2: Goods | Infrastructure | Consulting
-    procurement_mode    = Column(String)                  # Col 4
-    pre_proc_conference = Column(String, default="No")    # Col 5: Yes | No | N/A
-    start_activity      = Column(String)                  # Col 6: MM/YYYY
-    end_activity        = Column(String)                  # Col 7: MM/YYYY
-    delivery_period     = Column(String)                  # Col 8: MM/YYYY or range
-    source_of_funds     = Column(String, default="GoP")   # Col 9
-    supporting_docs     = Column(Text)                    # Col 11
-    remarks             = Column(Text)                    # Col 12
+class PPMPEntry(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid4()))  # stable id so a PR can reference this exact entry/"Project"
+    order_no: int = 1
+    category_id: Optional[str] = None
+    category_description: Optional[str] = None
+    # ADDED — feeds Column 1 (Project Title) when the APP is generated.
+    project_title: Optional[str] = None
+    description: str
+    project_type: str = "Goods"
+    procurement_mode: Optional[str] = None
+    pre_proc_conference: str = "No"
+    start_activity: Optional[str] = None
+    end_activity: Optional[str] = None
+    delivery_period: Optional[str] = None
+    source_of_funds: str = "GoP"
+    quantity_size: Optional[str] = None
+    estimated_budget: float = 0
+    items: List[PPMPEntryItem] = []
 
-    ppmp = relationship("PPMP", back_populates="projects")
-    lots = relationship("PPMPLot", back_populates="project", cascade="all, delete")
 
-class PPMPLot(Base):
-    """
-    Each lot under a project. Col 3 = quantity_size + estimated_budget (Col 10).
-    Multiple lots share the same Col 1 description (shown merged in print).
-    """
-    __tablename__ = "ppmp_lots"
+class PPMPProject(BaseModel):
+    order_no: int = 1
+    remarks: Optional[str] = None
+    # ADDED — title of the supporting document for this project (e.g.
+    # "Purchase Request", "BAC Resolution", "Canvass", "Letter Request").
+    # This is a title only — the actual uploaded file (if any) still goes
+    # through supporting_docs below.
+    attached_document_title: Optional[str] = None
+    supporting_docs: Optional[str] = None
+    total_budget: float = 0
+    entries: List[PPMPEntry] = []
 
-    id               = Column(Integer, primary_key=True, index=True)
-    project_id       = Column(Integer, ForeignKey("ppmp_projects.id"), nullable=False)
-    lot_no           = Column(String)      # e.g. "Lot 1", "Lot 2"
-    quantity_size    = Column(Text)        # Col 3: full text description of qty and size
-    estimated_budget = Column(Float, default=0)  # Col 10
+class Signatory(BaseModel):
+    sign_off: str
+    name: str
+    position: str
+    order_no: int
+    
+class PPMP(Document):
+    office_id: str
+    created_by: str
+    year: int
+    ppmp_no: Optional[str] = None
+    ppmp_type: str = "indicative"
+    status: str = "draft"
+    remarks: Optional[str] = None
+    allocated_budget: float = 0
+    # Short/Additional description describe the whole PPMP (filled in once
+    # on the frontend's Step 2), not any individual project.
+    description: Optional[str] = None
+    additional_description: Optional[str] = None
+    signatories: list[Signatory] = []
+    prepared_by: Optional[str] = None
+    prepared_by_position: Optional[str] = None
+    submitted_by: Optional[str] = None
+    submitted_by_position: Optional[str] = None
+    submitted_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    projects: List[PPMPProject] = []
+    # PPMP versioning: when a PPMP is edited and its ppmp_no changes, a new
+    # PPMP record is created. This field links the new record back to the
+    # original for audit/history purposes.
+    parent_ppmp_id: Optional[str] = None
 
-    project = relationship("PPMPProject", back_populates="lots")
+    class Settings:
+        name = "ppmps"
+        indexes = [
+            "office_id",
+            "created_by",
+            "year",
+            "status",
+        ]

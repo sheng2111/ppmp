@@ -16,10 +16,18 @@ interface APPRow {
   remarks: string;
 }
 
+interface APPSignatory {
+  sign_off: string;
+  name: string;
+  position: string;
+  order_no: number;
+}
+
 interface APPData {
   year: number;
   office_name: string;
   grand_total: number;
+  signatories: APPSignatory[];
   rows: APPRow[];
 }
 
@@ -255,98 +263,144 @@ export async function exportAPPToExcel(appData: APPData, appType: string) {
 
   ws.addRow([]);
 
-  // Signatures
-  const roles = [
-    "BAC Secretariat",
-    "BAC Chairperson",
-    "Head of the Procuring Entity",
-  ];
-  const labels = ["Prepared by:", "Recommended by:", "Approved by:"];
-  const s1 = ws.addRow([
-    labels[0],
-    "",
-    "",
-    "",
-    labels[1],
-    "",
-    "",
-    "",
-    labels[2],
-  ]);
-  ws.mergeCells(`A${s1.number}:D${s1.number}`);
-  ws.mergeCells(`E${s1.number}:H${s1.number}`);
-  ws.mergeCells(`I${s1.number}:L${s1.number}`);
-  s1.eachCell((cell) => {
-    cell.font = { name: "Calibri", bold: true, size: 9 };
-  });
+  // Signatories — grouped layout: Recommending Approval spans two columns
+  const signatories = (appData.signatories ?? [])
+    .slice()
+    .sort((a, b) => a.order_no - b.order_no);
 
-  ws.addRow([]);
-  ws.addRow([]);
-
-  const s2 = ws.addRow([
-    "________________________________",
-    "",
-    "",
-    "",
-    "________________________________",
-    "",
-    "",
-    "",
-    "________________________________",
-  ]);
-  ws.mergeCells(`A${s2.number}:D${s2.number}`);
-  ws.mergeCells(`E${s2.number}:H${s2.number}`);
-  ws.mergeCells(`I${s2.number}:L${s2.number}`);
-
-  const s3 = ws.addRow([
-    "Signature over Printed Name",
-    "",
-    "",
-    "",
-    "Signature over Printed Name",
-    "",
-    "",
-    "",
-    "Signature over Printed Name",
-  ]);
-  ws.mergeCells(`A${s3.number}:D${s3.number}`);
-  ws.mergeCells(`E${s3.number}:H${s3.number}`);
-  ws.mergeCells(`I${s3.number}:L${s3.number}`);
-  s3.eachCell((cell) => {
-    cell.font = { name: "Calibri", size: 8 };
-  });
-
-  roles.forEach((role, i) => {
-    const r = ws.addRow(
-      i === 0 ? [role, "", "", "", roles[1], "", "", "", roles[2]] : [],
-    );
-    if (i === 0) {
-      ws.mergeCells(`A${r.number}:D${r.number}`);
-      ws.mergeCells(`E${r.number}:H${r.number}`);
-      ws.mergeCells(`I${r.number}:L${r.number}`);
-      r.eachCell((cell) => {
-        cell.font = { name: "Calibri", size: 8 };
-      });
+  if (signatories.length > 0) {
+    // Group signatories: merge consecutive "Recommending Approval"
+    interface SignatoryGroup {
+      heading: string;
+      signatories: typeof signatories;
     }
-  });
+    const groups: SignatoryGroup[] = [];
+    let i = 0;
+    while (i < signatories.length) {
+      const s = signatories[i];
+      if (s.sign_off === "Recommending Approval") {
+        const group: typeof signatories = [];
+        while (i < signatories.length && signatories[i].sign_off === "Recommending Approval") {
+          group.push(signatories[i]);
+          i++;
+        }
+        groups.push({ heading: "Recommending Approval", signatories: group });
+      } else {
+        groups.push({ heading: s.sign_off, signatories: [s] });
+        i++;
+      }
+    }
 
-  const s4 = ws.addRow([
-    "Date: _________________",
-    "",
-    "",
-    "",
-    "Date: _________________",
-    "",
-    "",
-    "",
-    "Date: _________________",
-  ]);
-  ws.mergeCells(`A${s4.number}:D${s4.number}`);
-  ws.mergeCells(`E${s4.number}:H${s4.number}`);
-  ws.mergeCells(`I${s4.number}:L${s4.number}`);
-  s4.eachCell((cell) => {
-    cell.font = { name: "Calibri", size: 8 };
-  });
+    // Calculate columns per group (each signatory gets 3 columns)
+    const COLS_PER_SIGNATORY = 3;
+
+    // Heading row
+    const headingCells: string[] = [];
+    const headingMerges: { start: number; end: number }[] = [];
+    let colIdx = 1;
+    groups.forEach((group) => {
+      const startCol = colIdx;
+      const numCols = group.signatories.length * COLS_PER_SIGNATORY;
+      headingCells.push(group.heading, ...Array(numCols - 1).fill(""));
+      headingMerges.push({ start: startCol, end: startCol + numCols - 1 });
+      colIdx += numCols;
+    });
+    const s1 = ws.addRow(headingCells);
+    headingMerges.forEach(({ start, end }) => {
+      const startLetter = String.fromCharCode(64 + start);
+      const endLetter = String.fromCharCode(64 + end);
+      ws.mergeCells(`${s1.number}:${startLetter}${s1.number}:${endLetter}${s1.number}`);
+    });
+    s1.eachCell((cell) => {
+      cell.font = { name: "Calibri", bold: true, size: 8 };
+    });
+
+    ws.addRow([]);
+    ws.addRow([]);
+
+    // Signature lines
+    const sigCells: string[] = [];
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        sigCells.push("________________________________", "", "");
+      });
+    });
+    const s2 = ws.addRow(sigCells);
+    colIdx = 1;
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        const startLetter = String.fromCharCode(64 + colIdx);
+        const endLetter = String.fromCharCode(64 + colIdx + 2);
+        ws.mergeCells(`${s2.number}:${startLetter}${s2.number}:${endLetter}${s2.number}`);
+        colIdx += COLS_PER_SIGNATORY;
+      });
+    });
+
+    // Names (UPPERCASE)
+    const nameCells: string[] = [];
+    groups.forEach((group) => {
+      group.signatories.forEach((s) => {
+        nameCells.push((s.name || "").toUpperCase(), "", "");
+      });
+    });
+    const sName = ws.addRow(nameCells);
+    colIdx = 1;
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        const startLetter = String.fromCharCode(64 + colIdx);
+        const endLetter = String.fromCharCode(64 + colIdx + 2);
+        ws.mergeCells(`${sName.number}:${startLetter}${sName.number}:${endLetter}${sName.number}`);
+        colIdx += COLS_PER_SIGNATORY;
+      });
+    });
+    sName.eachCell((cell) => {
+      cell.font = { name: "Calibri", bold: true, size: 8 };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    // Positions
+    const posCells: string[] = [];
+    groups.forEach((group) => {
+      group.signatories.forEach((s) => {
+        posCells.push(s.position || "", "", "");
+      });
+    });
+    const sPos = ws.addRow(posCells);
+    colIdx = 1;
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        const startLetter = String.fromCharCode(64 + colIdx);
+        const endLetter = String.fromCharCode(64 + colIdx + 2);
+        ws.mergeCells(`${sPos.number}:${startLetter}${sPos.number}:${endLetter}${sPos.number}`);
+        colIdx += COLS_PER_SIGNATORY;
+      });
+    });
+    sPos.eachCell((cell) => {
+      cell.font = { name: "Calibri", size: 8 };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    // Date row
+    const dateCells: string[] = [];
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        dateCells.push("Date: _________________", "", "");
+      });
+    });
+    const s4 = ws.addRow(dateCells);
+    colIdx = 1;
+    groups.forEach((group) => {
+      group.signatories.forEach(() => {
+        const startLetter = String.fromCharCode(64 + colIdx);
+        const endLetter = String.fromCharCode(64 + colIdx + 2);
+        ws.mergeCells(`${s4.number}:${startLetter}${s4.number}:${endLetter}${s4.number}`);
+        colIdx += COLS_PER_SIGNATORY;
+      });
+    });
+    s4.eachCell((cell) => {
+      cell.font = { name: "Calibri", size: 8 };
+    });
+  }
 
   const buffer = await wb.xlsx.writeBuffer();
   const blob = new Blob([buffer], {

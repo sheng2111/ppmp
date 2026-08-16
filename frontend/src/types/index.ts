@@ -1,25 +1,42 @@
+export interface OfficeBasic {
+  id: string;
+  name: string;
+  code: string;
+}
+
+export interface OfficeAssignment {
+  office_id: string;
+  office_name: string;
+  office_code: string;
+  designation: string | null;
+}
+
 export interface DBUser {
-  is_approved: any;
-  id: number;
+  is_admin: any;
+  id: string;
   supabase_uid: string;
   full_name: string;
   email: string;
   role: "admin" | "user";
-  office_id: number | null;
+  designation: string | null;
+  is_approved: boolean;
+  offices: OfficeBasic[];
+  office_assignments: OfficeAssignment[];
   created_at: string;
 }
 
 export interface Office {
-  id: number;
+  id: string;
   name: string;
-  code: string;
-  head_name: string | null;
-  designation: string | null;
+  head_name?: string | null;
+  designation?: string | null;
+  fund_source?: string | null;
+  parent_office_id?: string | null;
   created_at: string;
 }
 
 export interface Item {
-  id: number;
+  id: string;
   name: string;
   unit: string;
   unit_price: number;
@@ -28,15 +45,23 @@ export interface Item {
   updated_at: string;
 }
 
+export interface PPMPLotItem {
+  item_name: string;
+  quantity: number;
+  unit: string;
+  unit_price: number;
+  total_cost: number;
+}
+
 export interface PPMPLot {
-  id: number;
   lot_no: string;
   quantity_size: string;
   estimated_budget: number;
+  items: PPMPLotItem[];
 }
 
 export interface PPMPProject {
-  id: number;
+  entries: never[];
   order_no: number;
   description: string;
   project_type: string;
@@ -53,15 +78,43 @@ export interface PPMPProject {
 }
 
 export interface PPMP {
-  id: number;
-  office_id: number;
-  created_by: number;
+  id: string;
+  office_id: string;
+  created_by: string;
   year: number;
   ppmp_no: string | null;
   ppmp_type: "indicative" | "final";
-  status: "draft" | "submitted" | "approved" | "rejected";
+  status: "draft" | "submitted" | "approved" | "rejected" | "archived";
   remarks: string | null;
   submitted_at: string | null;
   created_at: string;
   projects: PPMPProject[];
+}
+
+export interface PRItem {
+  lot_label: string | null;
+  stock_property_no: string | null;
+  unit: string | null;
+  item_description: string;
+  quantity: number;
+  unit_price: number;
+  total_cost: number;
+}
+
+export interface PR {
+  id: string;
+  office_id: string;
+  created_by: string;
+  pr_number: string | null;
+  fund_cluster: string | null;
+  responsibility_center_code: string | null;
+  purpose: string | null;
+  requested_date: string | null;
+  requested_by_name: string | null;
+  requested_by_designation: string | null;
+  approved_by_name: string | null;
+  approved_by_designation: string | null;
+  status: string;
+  created_at: string;
+  items: PRItem[];
 }

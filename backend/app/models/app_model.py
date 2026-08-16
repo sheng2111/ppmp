@@ -1,30 +1,37 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
-from sqlalchemy.sql import func
-from app.database import Base
-
-class APP(Base):
-    __tablename__ = "app"
-
-    id           = Column(Integer, primary_key=True, index=True)
-    year         = Column(Integer, nullable=False, unique=True)
-    status       = Column(String, default="draft")
-    generated_by = Column(Integer, ForeignKey("users.id"), nullable=True)
-    generated_at = Column(DateTime(timezone=True), server_default=func.now())
-    approved_at  = Column(DateTime(timezone=True))
-
-    items = relationship("APPItem", back_populates="app", cascade="all, delete")
+from beanie import Document
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
 
 
-class APPItem(Base):
-    __tablename__ = "app_items"
+class APPItem(BaseModel):
+    ppmp_project_id: Optional[str] = None
+    lot_id: Optional[str] = None
+    office_id: Optional[str] = None
+    estimated_budget: float = 0
+    project_title: Optional[str] = None
+    end_user: Optional[str] = None
+    general_description: Optional[str] = None
+    procurement_mode: Optional[str] = None
+    early_procurement: str = "No"
+    bid_evaluation: str = "N/A"
+    start_activity: Optional[str] = None
+    end_activity: Optional[str] = None
+    source_of_funds: str = "GoP"
+    procurement_strategy: Optional[str] = None
+    remarks: Optional[str] = None
 
-    id               = Column(Integer, primary_key=True, index=True)
-    app_id           = Column(Integer, ForeignKey("app.id"), nullable=False)
-    ppmp_project_id  = Column(Integer, ForeignKey("ppmp_projects.id"), nullable=False)
-    lot_id           = Column(Integer, ForeignKey("ppmp_lots.id"), nullable=False)
-    office_id        = Column(Integer, ForeignKey("offices.id"), nullable=False)
-    estimated_budget = Column(Float, default=0)
 
-    app         = relationship("APP", back_populates="items")
-    office      = relationship("Office")
+class APP(Document):
+    year: int
+    status: str = "draft"
+    generated_by: Optional[str] = None
+    generated_at: datetime = Field(default_factory=datetime.utcnow)
+    approved_at: Optional[datetime] = None
+    items: List[APPItem] = []
+
+    class Settings:
+        name = "apps"
+        indexes = [
+            "year",
+        ]
