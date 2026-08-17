@@ -2,7 +2,7 @@ import os
 from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from dotenv import load_dotenv
-
+import certifi
 load_dotenv()
 
 MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://sheilabentulan0_db_user:vQtp6c7k2JVyKbaO@testing.wbdy7wv.mongodb.net")
@@ -17,6 +17,7 @@ async def init_db():
     client = AsyncIOMotorClient(
         MONGO_URL,
         tls=True,
+        tlsCAFile=certifi.where(),
         serverSelectionTimeoutMS=10000,
     )
     db = client[DB_NAME]
