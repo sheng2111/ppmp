@@ -77,8 +77,14 @@ def _can_view_ppmp(ppmp: PPMP, my_id: Optional[str], is_admin: bool) -> bool:
     return my_id is not None and ppmp.created_by == my_id
 
 # ── File storage ────────────────────────────────────────────────────────────
-UPLOAD_DIR = Path("uploads") / "ppmp_attachments"
-UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+# UPLOAD_DIR = Path("uploads") / "ppmp_attachments"
+# UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+UPLOAD_DIR = Path(os.getenv("UPLOAD_DIR", "uploads/ppmp_attachments"))
+try:
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    UPLOAD_DIR = Path("/tmp/ppmp_attachments")
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_ATTACHMENT_EXTENSIONS = {
     ".pdf", ".doc", ".docx", ".xls", ".xlsx",
