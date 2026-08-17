@@ -1,10 +1,6 @@
 import axios from "axios";
 import { supabase } from "../lib/supabase";
 
-<<<<<<< HEAD
-const API = axios.create({
-  baseURL: process.env.REACT_APP_API_URL || "http://192.168.3.12:8000",
-=======
 const getBaseURL = () => {
   if (window.location.hostname === "localhost") {
     return "http://localhost:8000";
@@ -13,9 +9,10 @@ const getBaseURL = () => {
 };
 
 const api = axios.create({
-  baseURL: getBaseURL(),
-  headers: { "Content-Type": "application/json" },
->>>>>>> real
+  baseURL: import.meta.env.VITE_API_URL,
+  headers: {
+    "Content-Type": "application/json",
+  },
 });
 
 api.interceptors.request.use(async (config) => {
