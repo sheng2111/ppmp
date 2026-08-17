@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MONGO_URL = os.getenv("MONGO_URL", "mongodb://localhost:27017")
+MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://sheilabentulan0_db_user:vQtp6c7k2JVyKbaO@testing.wbdy7wv.mongodb.net")
 DB_NAME = os.getenv("DB_NAME", "ppmp_system")
 
 client: AsyncIOMotorClient = None
@@ -14,7 +14,11 @@ db = None
 
 async def init_db():
     global client, db
-    client = AsyncIOMotorClient(MONGO_URL)
+    client = AsyncIOMotorClient(
+        MONGO_URL,
+        tls=True,
+        serverSelectionTimeoutMS=10000,
+    )
     db = client[DB_NAME]
 
     from app.models.user import User
