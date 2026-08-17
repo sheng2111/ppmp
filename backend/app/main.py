@@ -34,12 +34,8 @@ cors_origins = [
 
 app.add_middleware(
     CORSMiddleware,
-<<<<<<< HEAD
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000","http://192.168.2.2:3000","http://192.168.3.12:3000"],
-=======
     allow_origins=cors_origins,
     allow_origin_regex=r"http://(localhost|127\.0\.0\.1|192\.168\.\d+\.\d+):\d+",
->>>>>>> real
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
