@@ -2009,8 +2009,6 @@ export default function CreatePPMPPage() {
 
   const addItem = (pIdx: number, eIdx: number, lotId: string = "") => {
     const newItems = projects[pIdx].entries[eIdx].items;
-    const newItemIdx = newItems.length;
-    const newItemKey = `${pIdx}-${eIdx}-${newItemIdx}`;
     setCollapsedItems((prev) => {
       const next = new Set(prev);
       newItems.forEach((_: LotItemForm, idx: number) => {

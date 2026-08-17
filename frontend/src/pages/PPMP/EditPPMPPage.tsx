@@ -1329,9 +1329,6 @@ export default function EditPPMPPage() {
   const [ppmpStatus, setPpmpStatus] = useState("draft");
   const [lockedItemIds, setLockedItemIds] = useState<Set<string>>(new Set());
   const [lockedEntryIds, setLockedEntryIds] = useState<Set<string>>(new Set());
-  const [lockedQuarters, setLockedQuarters] = useState<
-    Record<string, string[]>
-  >({});
 
   useEffect(() => {
     if (document.getElementById("ppmp-inter-font")) return;
@@ -2096,7 +2093,6 @@ export default function EditPPMPPage() {
             console.log("[PPMP Lock] quarters:", quarters);
             setLockedItemIds(new Set(ids));
             setLockedEntryIds(new Set(entryIds));
-            setLockedQuarters(quarters);
           })
           .catch((err) => {
             console.error("[PPMP Lock] FAILED:", err);

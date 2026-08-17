@@ -329,11 +329,6 @@ export default function APPPage() {
   const categorySubtotal = (rows: APPRow[]) =>
     rows.reduce((sum, r) => sum + (r.estimated_budget || 0), 0);
 
-  const epaTotal = (data: APPData) =>
-    data.rows
-      .filter((r) => r.early_procurement === "Yes")
-      .reduce((sum, r) => sum + (r.estimated_budget || 0), 0);
-
   const versionLabel = (data: APPData) => {
     if (data.version_type === "updated") {
       return `UPDATED${data.version_no ? ` [Version No. ${data.version_no}]` : " [Version No. ___]"}`;
@@ -1045,7 +1040,7 @@ export default function APPPage() {
                        {/* Name row */}
                        <tr>
                          {groups.map((group, gIdx) =>
-                           group.signatories.map((_s, sIdx) => (
+                           group.signatories.map((s, sIdx) => (
                              <td
                                key={`name-${gIdx}-${sIdx}`}
                                style={{
