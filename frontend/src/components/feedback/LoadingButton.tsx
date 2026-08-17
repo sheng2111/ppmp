@@ -9,6 +9,9 @@ interface LoadingButtonProps {
   busyLabel?: string;
   variant?: "primary" | "secondary" | "destructive" | "ghost";
   className?: string;
+  style?: React.CSSProperties;
+  onMouseEnter?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onMouseLeave?: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }
 
@@ -25,6 +28,9 @@ export function LoadingButton({
   busyLabel,
   variant = "primary",
   className = "",
+  style: externalStyle,
+  onMouseEnter,
+  onMouseLeave,
   children,
 }: LoadingButtonProps) {
   const isDisabled = disabled || busy;
@@ -42,6 +48,7 @@ export function LoadingButton({
 
   const baseStyle: React.CSSProperties = {
     ...variantStyles[variant],
+    ...externalStyle,
     opacity: isDisabled ? 0.5 : 1,
     cursor: isDisabled ? "not-allowed" : "pointer",
   };
@@ -52,16 +59,8 @@ export function LoadingButton({
       disabled={isDisabled}
       className={`inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition disabled:cursor-not-allowed ${className}`}
       style={baseStyle}
-      onMouseEnter={(e) => {
-        if (!isDisabled && variant === "primary") {
-          e.currentTarget.style.background = colors.primaryHover;
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (variant === "primary") {
-          e.currentTarget.style.background = colors.primary;
-        }
-      }}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
     >
       {busy && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
       {busy ? (busyLabel ?? "Saving...") : children}

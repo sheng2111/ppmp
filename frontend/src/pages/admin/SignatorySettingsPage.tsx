@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import { ArrowLeft, ShieldAlert, FileText } from "lucide-react";
-import { colors, gradients, font } from "./theme";
+import { colors, font } from "./theme";
 import { useToast } from "../../components/feedback/ToastProvider";
 import { LoadingButton } from "../../components/feedback/LoadingButton";
 import { SkeletonCard } from "../../components/feedback/Skeleton";
@@ -118,43 +118,6 @@ function InfoBanner({ children }: { children: React.ReactNode }) {
         {children}
       </p>
     </div>
-  );
-}
-
-function PrimaryButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className="px-5 py-2.5 rounded-xl text-sm font-semibold text-white transition disabled:opacity-50 disabled:cursor-not-allowed"
-      style={{ background: colors.primary }}
-      onMouseEnter={(e) => {
-        if (!disabled) e.currentTarget.style.background = colors.primaryHover;
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.background = colors.primary;
-      }}
-    >
-      {children}
-    </button>
-  );
-}
-
-/** Inline required-field error message */
-function FieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return (
-    <p className="text-xs mt-1" style={{ color: colors.error }}>
-      {message}
-    </p>
   );
 }
 

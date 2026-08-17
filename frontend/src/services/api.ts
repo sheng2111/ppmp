@@ -1,13 +1,6 @@
 import axios from "axios";
 import { supabase } from "../lib/supabase";
 
-const getBaseURL = () => {
-  if (window.location.hostname === "localhost") {
-    return "http://localhost:8000";
-  }
-  return `http://${window.location.hostname}:8000`;
-};
-// TESTING 1 2 3
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL,
   headers: {

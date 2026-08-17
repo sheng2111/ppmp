@@ -6,7 +6,6 @@ import {
   Archive as ArchiveIcon,
   RotateCcw,
   ChevronRight,
-  ClipboardList,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
@@ -20,7 +19,7 @@ import type { PPMP } from "../../types";
 // imports theme.ts from ./theme while sitting in src/pages/admin/. If this
 // file doesn't actually live in a sibling folder to admin/, update this
 // import accordingly.
-import { colors, gradients, font } from "../admin/theme";
+import { colors, font } from "../admin/theme";
 import PageHeader from "../../components/layout/PageHeader";
 
 const STATUS_COLORS: Record<string, string> = {
@@ -78,9 +77,6 @@ export default function PPMPListPage() {
   // than recomputing from entries/items on the client. This used to read
   // `p.lots`, which no longer exists now that lots were renamed to entries
   // on the backend.
-  const totalBudget = (ppmp: PPMP) =>
-    ppmp.projects.reduce((sum, p) => sum + (p.total_budget || 0), 0);
-
   const handleArchive = async (e: React.MouseEvent, ppmpId: string) => {
     e.stopPropagation();
     const confirmed = await confirm({

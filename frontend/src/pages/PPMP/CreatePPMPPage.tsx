@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../context/AuthContext";
 import type { Item } from "../../types";
-import { gradients, font } from "../admin/theme";
+import { font } from "../admin/theme";
 import { useToast } from "../../components/feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../../components/feedback/useUnsavedChangesGuard";
 import { useConfirmState } from "../../components/feedback/useConfirm";
@@ -1335,7 +1335,7 @@ export default function CreatePPMPPage() {
     signatories.length > 1;
   const { confirmState, confirm, handleConfirm, handleCancel } =
     useConfirmState();
-  const { guardNavigation } = useUnsavedChangesGuard(isDirty, confirm);
+  useUnsavedChangesGuard(isDirty, confirm);
 
   const [catalogItems, setCatalogItems] = useState<Item[]>([]);
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>(
@@ -1930,29 +1930,6 @@ export default function CreatePPMPPage() {
         const newP = pp < idx ? pp : pp - 1;
         next[entryKey(newP, Number(eStr))] = val;
       });
-      return next;
-    });
-  };
-
-  const addSignatory = () => {
-    const usedRoles = new Set(
-      signatories.filter((s) => s.sign_off !== "Others").map((s) => s.sign_off),
-    );
-    const nextRole =
-      SIGN_OFF_ROLES.find((r) => r !== "Others" && !usedRoles.has(r)) ||
-      "Others";
-    setSignatories((prev) => [
-      ...prev,
-      { ...emptySignatory(), sign_off: nextRole },
-    ]);
-  };
-
-  const removeSignatory = (id: string) => {
-    setSignatories((prev) => prev.filter((s) => s.id !== id));
-    setSignatoryErrors((prev) => {
-      if (!prev[id]) return prev;
-      const next = { ...prev };
-      delete next[id];
       return next;
     });
   };

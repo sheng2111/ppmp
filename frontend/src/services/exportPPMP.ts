@@ -48,7 +48,7 @@ const COLUMN_HEADERS = [
   "Attached Supporting Document/s",
   "Remarks",
 ];
-const TOTAL_COLS = COLUMN_HEADERS.length; // 12
+
 
 // Same grouping used by PPMPDetailPage — up to 3 signatories per row, each
 // getting a 4-column-wide block (A:D / E:H / I:L) so 3 fit across the sheet.
@@ -458,7 +458,7 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
       });
     };
 
-    entryGroups.forEach((list, code) => {
+    entryGroups.forEach((list: any[], code: string) => {
       if (code) {
         // Code banner row — project-level, green fill, bold, prints once
         const codeRow = ws.addRow([code]);

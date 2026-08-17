@@ -9,7 +9,7 @@ export interface ConfirmOptions {
   tone?: ConfirmTone;
 }
 
-interface ConfirmState extends ConfirmOptions {
+export interface ConfirmState extends ConfirmOptions {
   id: number;
   resolve: (result: boolean) => void;
 }

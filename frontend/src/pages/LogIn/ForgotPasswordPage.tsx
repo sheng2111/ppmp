@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../../lib/supabase";
 
 const PRIMARY = "#0284C7";
-const HEADING = "#0369A1";
 const BORDER = "#E2E8F0";
 const TEXT = "#1E293B";
 const HEADER_GRADIENT =

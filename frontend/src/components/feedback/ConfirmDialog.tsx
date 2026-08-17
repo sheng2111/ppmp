@@ -68,7 +68,7 @@ export function ConfirmDialog({
 
   if (!state) return null;
 
-  const tone = TONE_CONFIG[state.tone ?? "danger"];
+  const tone = TONE_CONFIG[(state.tone ?? "danger") as ConfirmTone];
 
   return (
     <div className="fixed inset-0 z-[90] flex items-center justify-center p-4">

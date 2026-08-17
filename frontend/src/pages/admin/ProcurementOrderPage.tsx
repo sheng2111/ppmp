@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useToast } from "../../components/feedback/ToastProvider";
 import { SkeletonRow } from "../../components/feedback/Skeleton";
-import { ArrowLeft, TriangleAlert, Loader2 } from "lucide-react";
+import { TriangleAlert, Loader2 } from "lucide-react";
 import PageHeader from "../../components/layout/PageHeader";
 
 interface ExpenseCategoryRow {

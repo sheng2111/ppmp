@@ -1,6 +1,5 @@
 import React from "react";
 import { Loader2 } from "lucide-react";
-import { colors } from "../../pages/admin/theme";
 
 interface LoadingOverlayProps {
   message?: string;

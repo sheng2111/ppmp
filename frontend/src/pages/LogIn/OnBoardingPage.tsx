@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff } from "lucide-react";
 import api from "../../services/api";
@@ -288,18 +288,17 @@ export default function PendingApprovalPage() {
             </div>
 
             <LoadingButton
-              type="button"
               onClick={handleSubmit}
               disabled={!isValid || submitting}
               busy={submitting}
               busyLabel="Setting up..."
               className="w-full py-3 text-white text-sm rounded-lg disabled:opacity-50 transition-colors duration-[250ms] tracking-widest uppercase"
               style={{ background: HEADER_GRADIENT, fontWeight: 700 }}
-              onMouseEnter={(e) => {
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => {
                 if (!submitting && isValid)
                   e.currentTarget.style.filter = "brightness(1.08)";
               }}
-              onMouseLeave={(e) => {
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => {
                 e.currentTarget.style.filter = "brightness(1)";
               }}
             >

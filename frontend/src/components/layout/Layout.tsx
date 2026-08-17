@@ -260,7 +260,7 @@ export default function Layout() {
   );
   const hasAutoExpandedRef = useRef(false);
   const isAdmin = dbUser?.role === "admin";
-  const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmState();
+  const { confirmState, handleConfirm, handleCancel } = useConfirmState();
 
   useEffect(() => {
     if (!isAdmin || !supabaseUser) {

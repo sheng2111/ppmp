@@ -19,15 +19,11 @@ import {
   CalendarClock,
   PenLine,
   ShoppingCart,
-  Bell,
   FileText,
   Send,
   CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
   ChevronDown,
   Eye,
-  Tag,
   PackageCheck,
   ExternalLink,
 } from "lucide-react";
@@ -63,7 +59,6 @@ const SUCCESS_BG = colors.successBg;
 const WARN = colors.warning;
 const WARN_BG = colors.warningBg;
 const DANGER = colors.error;
-const DANGER_BG = colors.errorBg;
 
 const fmt = (n: number) =>
   n.toLocaleString("en-PH", { minimumFractionDigits: 2 });
@@ -81,18 +76,6 @@ const fmtDate = (d?: string) =>
         day: "numeric",
       })
     : "—";
-const fmtRelative = (d?: string) => {
-  if (!d) return "—";
-  const diffMs = Date.now() - new Date(d).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 7) return `${days}d ago`;
-  return fmtDate(d);
-};
 
 // ── Types matching the REAL backend schema (app/models/ppmp.py +
 // app/schemas/ppmp.py) — NOT a guessed shape. Corrections vs. the previous
@@ -1444,15 +1427,15 @@ function EndUserDashboard({
   setSelectedOfficeId,
   fyPPMPCount,
   myDraftCount,
-  myFinalCount,
+  _myFinalCount,
   myAllocated,
   ppmpStats,
-  itemsWaitingForPR,
+  _itemsWaitingForPR,
   latestPPMPs,
   recentPPMPs,
-  recentDrafts,
+  _recentDrafts,
   activityFeed,
-  notifications,
+  _notifications,
   officeMap,
   myPrdCounts,
 }: any) {

@@ -9,7 +9,6 @@ import {
 } from "../../hooks/useSignatorySettings";
 import {
   Search,
-  Plus,
   X,
   ArrowLeft,
   ArrowRight,
@@ -191,7 +190,7 @@ export default function CreatePRPage() {
 
   const isDirty = selectedPpmpId !== "" || selectedOfficeId !== "" || quarter !== null || purpose !== "" || Object.keys(selected).length > 0;
   const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmState();
-  const { guardNavigation } = useUnsavedChangesGuard(isDirty, confirm);
+  useUnsavedChangesGuard(isDirty, confirm);
 
   // ── Draft persistence state ───────────────────────────────────────────
   const draftKey = dbUser?.id ? `${DRAFT_STORAGE_PREFIX}${dbUser.id}` : null;

@@ -142,12 +142,6 @@ const sigCellStyle: React.CSSProperties = {
   textAlign: "left",
   fontSize: "9px",
 };
-const sigSpacerStyle: React.CSSProperties = {
-  border: "none",
-  padding: 0,
-  width: "2%",
-  verticalAlign: "bottom",
-};
 const sigSerifFont =
   "Book Antiqua, Palatino, Garamond, Georgia, Times New Roman, serif";
 
@@ -209,7 +203,6 @@ export default function APPPage() {
   const [searchParams] = useSearchParams();
   const isAdmin = dbUser?.role === "admin";
 
-  const [allPpmps, setAllPpmps] = useState<PPMPOption[]>([]);
   const [filteredPpmps, setFilteredPpmps] = useState<PPMPOption[]>([]);
   const [selectedPpmpId, setSelectedPpmpId] = useState<string | null>(null);
   const [appData, setAppData] = useState<APPData | null>(null);
@@ -246,7 +239,6 @@ export default function APPPage() {
       params.created_by = dbUser.id;
     }
     api.get("/ppmps/", { params }).then((res) => {
-      setAllPpmps(res.data);
       setFilteredPpmps(res.data);
       // If a ppmpId was passed via query param, auto-select it.
       // Otherwise fall back to the first PPMP in the list.
@@ -1050,15 +1042,15 @@ export default function APPPage() {
                           />
                         ))}
                       </tr>
-                      {/* Name row */}
-                      <tr>
-                        {groups.map((group, gIdx) =>
-                          group.signatories.map((s, sIdx) => (
-                            <td
-                              key={`name-${gIdx}-${sIdx}`}
-                              style={{
-                                ...sigCellStyle,
-                                fontWeight: "bold",
+                       {/* Name row */}
+                       <tr>
+                         {groups.map((group, gIdx) =>
+                           group.signatories.map((_s, sIdx) => (
+                             <td
+                               key={`name-${gIdx}-${sIdx}`}
+                               style={{
+                                 ...sigCellStyle,
+                                 fontWeight: "bold",
                                 textDecoration: "underline",
                                 fontFamily: sigSerifFont,
                                 width: `${(1 / totalCols) * 100}%`,
@@ -1092,7 +1084,7 @@ export default function APPPage() {
                       {/* Date row */}
                       <tr>
                         {groups.map((group, gIdx) =>
-                          group.signatories.map((s, sIdx) => (
+                          group.signatories.map((_s, sIdx) => (
                             <td
                               key={`date-${gIdx}-${sIdx}`}
                               style={{

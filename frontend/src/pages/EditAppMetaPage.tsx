@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import api from "../services/api";
-import { ArrowLeft, Plus, X, Check } from "lucide-react";
+import { Plus, X, Check } from "lucide-react";
 import { useToast } from "../components/feedback/ToastProvider";
 import { useUnsavedChangesGuard } from "../components/feedback/useUnsavedChangesGuard";
 import { useConfirmState } from "../components/feedback/useConfirm";
@@ -118,7 +118,7 @@ export default function EditAppMetaPage() {
 
   const isDirty = versionType !== "indicative" || versionNo !== "" || signatories.length > 1;
   const { confirmState, confirm, handleConfirm, handleCancel } = useConfirmState();
-  const { guardNavigation } = useUnsavedChangesGuard(isDirty, confirm);
+  useUnsavedChangesGuard(isDirty, confirm);
 
   const [versionNoError, setVersionNoError] = useState("");
   const [signatoryErrors, setSignatoryErrors] = useState<
