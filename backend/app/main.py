@@ -8,7 +8,7 @@ from app.routers import users
 from app.routers import ppmp_consolidation
 from app.routers import app_consolidation
 from app.routers import fee_categories
-from app.routers import reports_router  
+from app.routers import reports_router
 from app.routers import notifications
 from app.routers import admin_dashboard
 from app.models.app_meta import AppMeta, AppSignatory
@@ -21,9 +21,6 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="e-PMS API", version="2.0.0", lifespan=lifespan)
 
-# Comma-separated list of allowed browser origins (e.g. your deployed
-# frontend URL). Falls back to the known production frontend when unset.
-# Local dev origins are always allowed.
 cors_origins = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
