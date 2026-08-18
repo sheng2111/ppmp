@@ -5,11 +5,10 @@ from dotenv import load_dotenv
 import certifi
 load_dotenv()
 
-# MONGO_URL = os.getenv("MONGO_URL", "mongodb+srv://sheilabentulan0_db_user:vQtp6c7k2JVyKbaO@testing.wbdy7wv.mongodb.net")
 MONGODB_URI = os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("DB_NAME", "ppmp_system")
 if not MONGODB_URI:
-    raise RuntimeError("MONGO_URL environment variable is not configured")
+    raise RuntimeError("MONGODB_URI environment variable is not configured")
 client: AsyncIOMotorClient = None
 db = None
 
