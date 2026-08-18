@@ -3,5 +3,5 @@
   "functions": {
     "app/main.py": { "maxDuration": 60 }
   },
-  "rewrites": [{ "source": "/(.*)", "destination": "app/main.py" }]
+  "rewrites": [{ "source": "/(.*)", "destination": "/app/main.py" }]
 }
