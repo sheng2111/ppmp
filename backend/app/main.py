@@ -24,7 +24,7 @@ app = FastAPI(title="e-PMS API", version="2.0.0", lifespan=lifespan)
 cors_origins = [
     origin.strip().rstrip("/")
     for origin in os.getenv(
-        "CORS_ORIGINS", "https://ppmp-mauve.vercel.app"
+        "CORS_ORIGINS", "https://ppmp-mauve.vercel.app/"
     ).split(",")
     if origin.strip()
 ]
