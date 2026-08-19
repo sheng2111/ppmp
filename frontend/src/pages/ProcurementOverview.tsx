@@ -585,6 +585,7 @@ export default function ProcurementOverview({
             status: p.status,
             created_at: p.created_at,
             office_id: p.office_id,
+            office_name: (p as any).office_name,
             year: p.year,
             allocated,
             spent,
