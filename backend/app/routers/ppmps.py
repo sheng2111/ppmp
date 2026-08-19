@@ -419,9 +419,13 @@ async def get_eligible_ppmps(
 
 @router.get("/offices-by-user")
 async def get_offices_by_user(requester_uid: Optional[str] = None):
-    ppmps = await PPMP.find(
-        {"status": {"$ne": "archived"}}
-    ).to_list()
+    my_id, is_admin = await _resolve_requester(requester_uid)
+
+    query: dict = {"status": {"$ne": "archived"}}
+    if my_id and not is_admin:
+        query["created_by"] = my_id
+
+    ppmps = await PPMP.find(query).to_list()
 
     seen_office_ids: dict[str, set] = {}
     result: dict[str, list] = {}

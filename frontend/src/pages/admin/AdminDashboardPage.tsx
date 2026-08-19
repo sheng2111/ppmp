@@ -152,9 +152,7 @@ function NotificationBell({ requesterUid }: { requesterUid: string }) {
       try {
         await markNotificationRead(n.id, requesterUid);
         setUnread((u) => Math.max(0, u - 1));
-        setItems((prev) =>
-          prev.map((it) => (it.id === n.id ? { ...it, read: true } : it)),
-        );
+        setItems((prev) => prev.filter((it) => it.id !== n.id));
       } catch {
         /* still navigate even if marking read fails */
       }
@@ -167,7 +165,7 @@ function NotificationBell({ requesterUid }: { requesterUid: string }) {
     try {
       await markAllNotificationsRead(requesterUid);
       setUnread(0);
-      setItems((prev) => prev.map((it) => ({ ...it, read: true })));
+      setItems([]);
     } finally {
       setMarkingAll(false);
     }

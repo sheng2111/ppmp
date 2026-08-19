@@ -255,6 +255,7 @@ export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hoverOpened, setHoverOpened] = useState(false);
+  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pendingCount, setPendingCount] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(() =>
     loadExpandedGroups(),
@@ -500,16 +501,22 @@ export default function Layout() {
           className={`print:hidden ${sidebarOpen ? "w-64" : "w-[72px]"} h-screen shrink-0 flex flex-col overflow-hidden transition-all duration-200 bg-white shadow-[2px_0_12px_rgba(15,23,42,0.04)]`}
           style={{ borderRight: `1px solid ${SIDEBAR_BORDER}` }}
           onMouseEnter={() => {
+            if (hoverTimerRef.current) {
+              clearTimeout(hoverTimerRef.current);
+              hoverTimerRef.current = null;
+            }
             if (!sidebarOpen) {
               setSidebarOpen(true);
               setHoverOpened(true);
             }
           }}
           onMouseLeave={() => {
-            if (hoverOpened) {
-              setSidebarOpen(false);
-              setHoverOpened(false);
-            }
+            hoverTimerRef.current = setTimeout(() => {
+              if (hoverOpened) {
+                setSidebarOpen(false);
+                setHoverOpened(false);
+              }
+            }, 150);
           }}
         >
           {/* ── Header: blue/cyan gradient brand block ── */}

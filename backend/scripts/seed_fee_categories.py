@@ -12,7 +12,7 @@ from app.models.fee_category_office import FeeCategoryOffice
 
 load_dotenv()
 
-MONGO_URL = os.getenv("MONGO_URL")
+MONGO_URL = os.getenv("MONGO_URL") or os.getenv("MONGODB_URI")
 DB_NAME = os.getenv("DB_NAME")
 
 # Offices directly under "Tuition Fees" (formerly labeled "STF")

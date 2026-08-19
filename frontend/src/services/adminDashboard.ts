@@ -122,9 +122,10 @@ export interface AdminNotification {
 export async function fetchNotifications(
   requesterUid: string,
   limit = 50,
+  unreadOnly = true,
 ): Promise<AdminNotification[]> {
   const { data } = await api.get("/notifications/", {
-    params: { requester_uid: requesterUid, limit },
+    params: { requester_uid: requesterUid, limit, unread_only: unreadOnly },
   });
   return data;
 }
