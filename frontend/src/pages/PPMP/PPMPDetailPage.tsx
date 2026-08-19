@@ -1211,7 +1211,8 @@ export default function PPMPDetailPage() {
           body * { visibility: hidden; }
           #ppmp-print, #ppmp-print * { visibility: visible; }
           #ppmp-print img { visibility: visible !important; display: block !important; }
-          #ppmp-print { width: 100%; padding: 0; font-size: 8px; }
+          #ppmp-print { width: 100%; padding: 0; font-size: 8px; display: block !important; text-align: left; vertical-align: top; }
+          #ppmp-print table { page-break-inside: avoid; }
           .ppmp-schedule-table th, .ppmp-schedule-table td { padding: 2px 4px !important; font-size: 7.5px !important; line-height: 1.15 !important; }
 
           /* Don't let the browser repeat the grouped header (PROCUREMENT
