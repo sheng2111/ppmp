@@ -45,10 +45,21 @@ async def get_dashboard_summary(
     """
     await require_admin(requester_uid)
 
+    # Resolve admin's user id to filter out drafts they didn't create
+    from app.models.user import User
+    admin_user = await User.find_one(User.supabase_uid == requester_uid)
+    admin_user_id = str(admin_user.id) if admin_user else None
+
     offices = await FeeCategoryOffice.find_all().to_list()
     offices_by_id = {str(o.id): o for o in offices}
 
     all_ppmps = await PPMP.find({"status": {"$ne": "archived"}}).to_list()
+
+    # Filter: only show drafts the admin created; submitted/approved shown to all
+    all_ppmps = [
+        p for p in all_ppmps
+        if p.status != "draft" or p.created_by == admin_user_id
+    ]
     fiscal_years = sorted({p.year for p in all_ppmps if p.year}, reverse=True)
 
     default_year = fiscal_years[0] if fiscal_years else datetime.now().year

@@ -72,8 +72,6 @@ async def _resolve_requester(requester_uid: Optional[str]):
 def _can_view_ppmp(ppmp: PPMP, my_id: Optional[str], is_admin: bool) -> bool:
     if ppmp.status != "draft":
         return True
-    if is_admin:
-        return True
     return my_id is not None and ppmp.created_by == my_id
 
 # ── File storage ────────────────────────────────────────────────────────────
