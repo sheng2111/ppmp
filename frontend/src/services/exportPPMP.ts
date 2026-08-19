@@ -34,6 +34,11 @@ const loadImageBase64 = async (url: string): Promise<string | null> => {
   }
 };
 
+// Only the first 10 headers are used for the column-header row — the last
+// two ("Attached Supporting Document/s" / "Remarks") are NOT used, since
+// PPMPDetailPage.tsx hardcodes the literal uppercase strings
+// "ATTACHED SUPPORTING DOCUMENTS" / "REMARKS" for those two group-header
+// cells instead of pulling from this array (see r9 below).
 const COLUMN_HEADERS = [
   "General Description and Objective of the Project to be Procured",
   "Type of the Project to be Procured (whether Goods, Infrastructure and Consulting Services)",
@@ -45,15 +50,12 @@ const COLUMN_HEADERS = [
   "Expected Delivery/ Implementation Period",
   "Source of Funds",
   "Estimated Budget / Authorized Budgetary Allocation (PhP)",
-  "Attached Supporting Document/s",
-  "Remarks",
 ];
 
+const TOTAL_COLS = 12;
 
-// Same grouping used by PPMPDetailPage — 4 signatories per row, each
-// getting a 3-column-wide block (A:C / D:F / G:I / J:L) so 4 fit across the sheet.
-const SIGNATORIES_PER_ROW = 4;
-const SIG_BLOCK_COLS = 3;
+// A-L only (12 columns max) — good enough for this sheet.
+const colLetter = (n: number) => String.fromCharCode(64 + n);
 
 export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
   const wb = new ExcelJS.Workbook();
@@ -106,7 +108,9 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
         "/bagong-pilipinas-logo.png",
       ].map(async (url) => {
         const base64 = await loadImageBase64(url);
-        return base64 === null ? null : wb.addImage({ base64, extension: "png" });
+        return base64 === null
+          ? null
+          : wb.addImage({ base64, extension: "png" });
       }),
     );
 
@@ -124,6 +128,14 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
     vertical: "top",
     wrapText: true,
   };
+  // Matches the description cell (column 1), which is left-aligned but
+  // vertically centered in PPMPDetailPage, unlike the other left-aligned
+  // (top-anchored) cells.
+  const leftMiddleAlign: Partial<ExcelJS.Alignment> = {
+    horizontal: "left",
+    vertical: "middle",
+    wrapText: true,
+  };
   const rightAlign: Partial<ExcelJS.Alignment> = {
     horizontal: "right",
     vertical: "middle",
@@ -138,6 +150,13 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
   const noBottomBorder: Partial<ExcelJS.Borders> = {
     top: { style: "thin" },
     left: { style: "thin" },
+    right: { style: "thin" },
+  };
+  // Matches the subtotal row's last two cells, which explicitly drop the
+  // top border (`borderTop: "none"`) while keeping left/right/bottom.
+  const noTopBorder: Partial<ExcelJS.Borders> = {
+    left: { style: "thin" },
+    bottom: { style: "thin" },
     right: { style: "thin" },
   };
   const colNumberFill: ExcelJS.Fill = {
@@ -218,53 +237,55 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
   titleRow.getCell(1).alignment = centerAlign;
   titleRow.height = 18;
 
-  // ── Indicative / Final
+  // ── Indicative / Final — matches the bordered-box checkbox pair,
+  // centered, on its own line directly under the title.
   const checkRow = ws.addRow([
-    `${ppmp.ppmp_type === "indicative" ? "[✔]" : "[ ]"} INDICATIVE          ${ppmp.ppmp_type === "final" ? "[✔]" : "[ ]"} FINAL`,
+    `${ppmp.ppmp_type === "indicative" ? "[✔]" : "[ ]"} INDICATIVE     ${ppmp.ppmp_type === "final" ? "[✔]" : "[ ]"} FINAL`,
   ]);
   ws.mergeCells(`A${checkRow.number}:L${checkRow.number}`);
   checkRow.getCell(1).font = { name: "Calibri", size: 9 };
   checkRow.getCell(1).alignment = centerAlign;
   checkRow.height = 14;
 
-  // ── Fiscal Year / End-User — label sits in a fixed-width column (A:C)
-  // and the value always starts in column D, so the two values line up
-  // regardless of how long each label text is.
-  ws.addRow([]);
+  // ── Fiscal Year / End-User — PPMPDetailPage renders these as a fixed
+  // 220px-wide bold label immediately followed by the value (no extra
+  // gap), so the label merge here is kept narrow (A:B) rather than
+  // spanning half the sheet.
   const fyRow = ws.addRow([]);
-  ws.mergeCells(`A${fyRow.number}:C${fyRow.number}`);
-  ws.mergeCells(`D${fyRow.number}:L${fyRow.number}`);
+  ws.mergeCells(`A${fyRow.number}:B${fyRow.number}`);
+  ws.mergeCells(`C${fyRow.number}:L${fyRow.number}`);
   fyRow.getCell(1).value = "Fiscal Year:";
   fyRow.getCell(1).font = { name: "Calibri", bold: true, size: 9 };
   fyRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-  fyRow.getCell(2).value = ppmp.year;
-  fyRow.getCell(2).font = { name: "Calibri", size: 9 };
-  fyRow.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+  fyRow.getCell(3).value = ppmp.year;
+  fyRow.getCell(3).font = { name: "Calibri", size: 9 };
+  fyRow.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
   fyRow.height = 10;
 
   const euRow = ws.addRow([]);
-  ws.mergeCells(`A${euRow.number}:C${euRow.number}`);
-  ws.mergeCells(`D${euRow.number}:L${euRow.number}`);
+  ws.mergeCells(`A${euRow.number}:B${euRow.number}`);
+  ws.mergeCells(`C${euRow.number}:L${euRow.number}`);
   euRow.getCell(1).value = "End-User or Implementing Unit:";
   euRow.getCell(1).font = { name: "Calibri", bold: true, size: 9 };
   euRow.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
-  euRow.getCell(2).value = office?.name || "___";
-  euRow.getCell(2).font = { name: "Calibri", size: 9 };
-  euRow.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+  euRow.getCell(3).value = office?.name || "___";
+  euRow.getCell(3).font = { name: "Calibri", size: 9 };
+  euRow.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
   euRow.height = 10;
 
   ws.addRow([]);
 
-  // ── Group header row (rowSpan for Docs/Remarks handled via vertical
-  // merge with the column-header row below; no fill, matching thStyle
-  // which sets no backgroundColor)
+  // ── Group header row. PPMPDetailPage's colSpans are 5 / 3 / 2 (not
+  // 4 / 4 / 2): PROCUREMENT PROJECT DETAILS runs through the
+  // Pre-Procurement Conference column, and PROJECTED TIMELINE covers
+  // only Start/End/Delivery.
   const r9 = ws.addRow([
     "PROCUREMENT PROJECT DETAILS",
     "",
     "",
     "",
-    "PROJECTED TIMELINE (MM/YYYY)",
     "",
+    "PROJECTED TIMELINE (MM/YYYY)",
     "",
     "",
     "FUNDING DETAILS",
@@ -272,14 +293,14 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
     "ATTACHED SUPPORTING DOCUMENTS",
     "REMARKS",
   ]);
-  ws.mergeCells(`A${r9.number}:D${r9.number}`);
-  ws.mergeCells(`E${r9.number}:H${r9.number}`);
+  ws.mergeCells(`A${r9.number}:E${r9.number}`);
+  ws.mergeCells(`F${r9.number}:H${r9.number}`);
   ws.mergeCells(`I${r9.number}:J${r9.number}`);
   r9.height = 20;
 
   // ── Column header row (only 10 values — cols 11/12 are the rowSpan
   // merge continuing from r9)
-  const r10 = ws.addRow(COLUMN_HEADERS.slice(0, 10));
+  const r10 = ws.addRow(COLUMN_HEADERS);
   r10.height = 68;
   ws.mergeCells(`K${r9.number}:K${r10.number}`);
   ws.mergeCells(`L${r9.number}:L${r10.number}`);
@@ -377,15 +398,12 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
     // Code is project-level and shared by all entries under it, so one
     // banner prints per distinct code, with every entry that uses it
     // beneath (legacy PPMPs may carry different codes per entry).
-    const entryGroups = entries.reduce(
-      (acc: Map<string, any[]>, e: any) => {
-        const code = e.category_description || "";
-        if (!acc.has(code)) acc.set(code, []);
-        acc.get(code)!.push(e);
-        return acc;
-      },
-      new Map<string, any[]>(),
-    );
+    const entryGroups = entries.reduce((acc: Map<string, any[]>, e: any) => {
+      const code = e.category_description || "";
+      if (!acc.has(code)) acc.set(code, []);
+      acc.get(code)!.push(e);
+      return acc;
+    }, new Map<string, any[]>());
 
     const renderEntryRow = (entry: any) => {
       const items = entry.items ?? [];
@@ -395,7 +413,9 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
         0,
       );
 
-      // ── Single row for the whole entry
+      // ── Single row for the whole entry. Column 11 (Docs) reads
+      // `attached_document_title` — PPMPDetailPage does NOT use
+      // `supporting_docs` for this cell.
       const row = ws.addRow([
         entry.description || "",
         entry.project_type || "",
@@ -407,7 +427,7 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
         entry.delivery_period || "",
         entry.source_of_funds || "",
         entryAmount || "",
-        project.supporting_docs || "",
+        (project as any).attached_document_title || "",
         project.remarks || "",
       ]);
       // Grow the row to fit however many items are stacked in column 3
@@ -440,18 +460,24 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
         }
       }
 
+      // PPMPDetailPage centers Type, Mode, Pre-Proc, Start, End, Delivery,
+      // Source, Docs, and Remarks (columns 2,4,5,6,7,8,9,11,12). Only the
+      // Description (1, bold, vertically centered) and Qty/Size (3, left,
+      // top-anchored) columns are left-aligned; Budget (10) is right.
       row.eachCell((cell, colNumber) => {
         cell.font = colNumber === 1 ? boldFont : dataFont;
         cell.border =
           colNumber === 11 || colNumber === 12 ? noBottomBorder : thinBorder;
         cell.fill = rowBg;
 
-        if ([2, 5, 6, 7, 8, 9].includes(colNumber)) {
+        if ([2, 4, 5, 6, 7, 8, 9, 11, 12].includes(colNumber)) {
           cell.alignment = centerAlign;
         } else if (colNumber === 10) {
           cell.alignment = rightAlign;
           cell.font = boldFont;
           if (cell.value) cell.numFmt = "₱#,##0.00";
+        } else if (colNumber === 1) {
+          cell.alignment = leftMiddleAlign;
         } else {
           cell.alignment = leftAlign;
         }
@@ -504,8 +530,11 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
     valueCell.numFmt = "₱#,##0.00";
     valueCell.border = thinBorder;
 
-    subRow.getCell(11).border = thinBorder;
-    subRow.getCell(12).border = thinBorder;
+    // Columns 11/12 explicitly drop the top border in PPMPDetailPage
+    // (`borderTop: "none"`), unlike everywhere else that uses a full
+    // thin border.
+    subRow.getCell(11).border = noTopBorder;
+    subRow.getCell(12).border = noTopBorder;
   });
 
   // ── Grand total row — cols 1-7 borderless, 8-9 merged label, 10 value,
@@ -544,54 +573,72 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
 
   ws.addRow([]);
 
-  // ── Signatories — dynamic list from ppmp.signatories (sign_off, name,
-  // position, order_no), grouped 3-per-row across 4-column blocks
-  // (A:D / E:H / I:L). Falls back to a static Prepared by / Submitted by
-  // pair (no Reviewed By) when no signatories are set, matching
-  // PPMPDetailPage exactly.
+  // ── Signatories — PPMPDetailPage ALWAYS keeps every signatory on a
+  // single line (shrinking their width as the count grows) rather than
+  // wrapping to additional rows. Excel can't shrink a column's width per
+  // block, so instead every signatory gets an even share of the sheet's
+  // 12 columns on one row — for the common case of ≤4 signatories this
+  // gives each one 3+ columns, same as before, but it no longer wraps
+  // once there are 5 or more.
   const signatories: any[] = [...((ppmp as any).signatories ?? [])].sort(
     (a: any, b: any) => (a.order_no ?? 0) - (b.order_no ?? 0),
   );
-  const signatoryGroups: any[][] = [];
-  for (let i = 0; i < signatories.length; i += SIGNATORIES_PER_ROW) {
-    signatoryGroups.push(signatories.slice(i, i + SIGNATORIES_PER_ROW));
-  }
 
   const sigLabelFont = { name: "Calibri", bold: true, size: 9 };
   const sigNameFont = { name: "Calibri", bold: true, size: 9, underline: true };
   const sigSmallFont = { name: "Calibri", size: 8 };
 
   const writeSignatureBlock = (
-    entries: { label: string; name: string; position: string }[],
+    entries: {
+      label: string;
+      name: string;
+      position: string;
+      // Only the static Prepared by / Submitted by fallback shows literal
+      // placeholder text for an empty name/position — real signatories
+      // just render blank, matching PPMPDetailPage exactly.
+      showFallbackPlaceholders: boolean;
+    }[],
   ) => {
-    // Row 1: labels
+    const count = entries.length;
+    if (count === 0) return;
+
+    const baseCols = Math.floor(TOTAL_COLS / count);
+    const extra = TOTAL_COLS % count; // first `extra` signatories get 1 more col
+
+    // Row 1: labels. Row 2: blank spacer for the physical signature
+    // (≈20px in PPMPDetailPage). Rows 3-5: name / position / date.
     const labelRow = ws.addRow([]);
     labelRow.height = 14;
-    // blank spacer row for the physical signature
-    ws.addRow([]).height = 14;
-    ws.addRow([]).height = 14;
+    const spacerRow = ws.addRow([]);
+    spacerRow.height = 18;
     const nameRow = ws.addRow([]);
     const posRow = ws.addRow([]);
     const dateRow = ws.addRow([]);
 
+    let col = 1;
     entries.forEach((entry, idx) => {
-      const startCol = idx * SIG_BLOCK_COLS + 1;
-      const endCol = startCol + SIG_BLOCK_COLS - 1;
-      const startLetter = String.fromCharCode(64 + startCol);
-      const endLetter = String.fromCharCode(64 + endCol);
+      const span = baseCols + (idx < extra ? 1 : 0);
+      const startCol = col;
+      const endCol = col + span - 1;
+      col = endCol + 1;
 
-      ws.mergeCells(
-        `${startLetter}${labelRow.number}:${endLetter}${labelRow.number}`,
-      );
-      ws.mergeCells(
-        `${startLetter}${nameRow.number}:${endLetter}${nameRow.number}`,
-      );
-      ws.mergeCells(
-        `${startLetter}${posRow.number}:${endLetter}${posRow.number}`,
-      );
-      ws.mergeCells(
-        `${startLetter}${dateRow.number}:${endLetter}${dateRow.number}`,
-      );
+      const startLetter = colLetter(startCol);
+      const endLetter = colLetter(endCol);
+
+      if (startLetter !== endLetter) {
+        ws.mergeCells(
+          `${startLetter}${labelRow.number}:${endLetter}${labelRow.number}`,
+        );
+        ws.mergeCells(
+          `${startLetter}${nameRow.number}:${endLetter}${nameRow.number}`,
+        );
+        ws.mergeCells(
+          `${startLetter}${posRow.number}:${endLetter}${posRow.number}`,
+        );
+        ws.mergeCells(
+          `${startLetter}${dateRow.number}:${endLetter}${dateRow.number}`,
+        );
+      }
 
       const lCell = labelRow.getCell(startCol);
       lCell.value = `${entry.label}:`;
@@ -599,12 +646,18 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
       lCell.alignment = { horizontal: "left", vertical: "bottom" };
 
       const nCell = nameRow.getCell(startCol);
-      nCell.value = entry.name || "________________________________";
+      nCell.value =
+        entry.name ||
+        (entry.showFallbackPlaceholders
+          ? "________________________________"
+          : "");
       nCell.font = sigNameFont;
       nCell.alignment = { horizontal: "left", vertical: "bottom" };
 
       const pCell = posRow.getCell(startCol);
-      pCell.value = entry.position || "Position/Designation";
+      pCell.value =
+        entry.position ||
+        (entry.showFallbackPlaceholders ? "Position/Designation" : "");
       pCell.font = sigSmallFont;
       pCell.alignment = { horizontal: "left", vertical: "top" };
 
@@ -615,16 +668,15 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
     });
   };
 
-  if (signatoryGroups.length > 0) {
-    signatoryGroups.forEach((group) => {
-      writeSignatureBlock(
-        group.map((s: any) => ({
-          label: s.sign_off,
-          name: toDisplayName(s.name),
-          position: s.position,
-        })),
-      );
-    });
+  if (signatories.length > 0) {
+    writeSignatureBlock(
+      signatories.map((s: any) => ({
+        label: s.sign_off,
+        name: toDisplayName(s.name),
+        position: s.position || "",
+        showFallbackPlaceholders: false,
+      })),
+    );
   } else {
     const preparedByName = toDisplayName((ppmp as any).prepared_by);
     const submittedByName = toDisplayName((ppmp as any).submitted_by);
@@ -632,12 +684,14 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
       {
         label: "Prepared by",
         name: preparedByName,
-        position: "Position/Designation",
+        position: "",
+        showFallbackPlaceholders: true,
       },
       {
         label: "Submitted by",
         name: submittedByName,
-        position: "Position/Designation",
+        position: "",
+        showFallbackPlaceholders: true,
       },
     ]);
   }
@@ -677,29 +731,17 @@ export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
   });
 
   if (pinImageId !== null) {
-    ws.addImage(
-      pinImageId,
-      footerImagePosition(0, 0, 0, 14, 14),
-    );
+    ws.addImage(pinImageId, footerImagePosition(0, 0, 0, 14, 14));
   }
 
   if (alpasImageId !== null) {
-    ws.addImage(
-      alpasImageId,
-      footerImagePosition(8, 0, 4, 55, 55),
-    );
+    ws.addImage(alpasImageId, footerImagePosition(8, 0, 4, 55, 55));
   }
   if (ukasImageId !== null) {
-    ws.addImage(
-      ukasImageId,
-      footerImagePosition(9, 2, 13, 60, 37),
-    );
+    ws.addImage(ukasImageId, footerImagePosition(9, 2, 13, 60, 37));
   }
   if (bagongImageId !== null) {
-    ws.addImage(
-      bagongImageId,
-      footerImagePosition(10, 2, 6, 48, 50),
-    );
+    ws.addImage(bagongImageId, footerImagePosition(10, 2, 6, 48, 50));
   }
 
   const pageCell = footerRow.getCell(12);
