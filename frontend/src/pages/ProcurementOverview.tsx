@@ -860,7 +860,7 @@ export default function ProcurementOverview({
                         className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
                         style={{ background: "#EEF2FF", color: "#4338CA" }}
                       >
-                        {officeMap.get(String(p.office_id))?.name || "—"}
+                        {p.office_name || officeMap.get(String(p.office_id))?.name || "—"}
                       </span>
                       <span
                         className="text-[10px] px-2 py-0.5 rounded-full font-semibold"

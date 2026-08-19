@@ -376,6 +376,7 @@ export default function OfficesPPMPListPage() {
     ppmp.projects.reduce((sum, p) => sum + (p.total_budget || 0), 0);
 
   const officeLabel = (ppmp: PPMP) => {
+    if (ppmp.office_name) return ppmp.office_name;
     const office = flatOffices.find((o) => o.id === ppmp.office_id);
     if (!office) return `Office #${ppmp.office_id}`;
     return office.parentName

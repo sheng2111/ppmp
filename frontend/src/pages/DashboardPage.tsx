@@ -1348,7 +1348,7 @@ function AdminDashboard({
                       {p.ppmp_no || "—"}
                     </td>
                     <td className="py-2 text-slate-500">
-                      {officeMap.get(String(p.office_id))?.name || "—"}
+                      {p.office_name || officeMap.get(String(p.office_id))?.name || "—"}
                     </td>
                     <td className="py-2">
                       <StatusPill status={p.status} />
@@ -1612,7 +1612,7 @@ function EndUserDashboard({
                           color: "#4338CA",
                         }}
                       >
-                        {officeMap.get(String(p.office_id))?.name || "—"}
+                        {p.office_name || officeMap.get(String(p.office_id))?.name || "—"}
                       </span>
                       <span
                         className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
