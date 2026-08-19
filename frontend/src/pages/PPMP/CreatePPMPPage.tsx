@@ -792,12 +792,14 @@ function CategoryAutocomplete({
   categories,
   onChangeText,
   onSelectCategory,
+  onUseCustomCode,
   hasError,
 }: {
   value: string;
   categories: ExpenseCategory[];
   onChangeText: (text: string) => void;
   onSelectCategory: (category: ExpenseCategory) => void;
+  onUseCustomCode?: (customDescription: string) => void;
   hasError?: boolean;
 }) {
   const [open, setOpen] = useState(false);
@@ -884,9 +886,23 @@ function CategoryAutocomplete({
             className="z-50 mt-1 max-h-80 overflow-y-auto overscroll-contain bg-white border border-[#E2E8F0] rounded-xl shadow-lg py-1"
           >
             {matches.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-[#64748B]">
-                No matching category found.
-              </p>
+              <div>
+                <p className="px-3 py-2 text-sm text-[#64748B]">
+                  No matching category found.
+                </p>
+                {value.trim().length > 0 && onUseCustomCode && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onUseCustomCode(value.trim());
+                      setOpen(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm hover:bg-[#E0F2FE] text-[#0284C7] font-medium border-t border-[#E2E8F0]"
+                  >
+                    Use custom code: "{value.trim()}"
+                  </button>
+                )}
+              </div>
             ) : (
               matches.map((c) => (
                 <button
@@ -3607,6 +3623,10 @@ export default function CreatePPMPPage() {
                 }}
                 onSelectCategory={(category) => {
                   handleSelectCategory(activeProject, category);
+                }}
+                onUseCustomCode={(customDesc) => {
+                  updateProject(activeProject, "category_id", "");
+                  updateProject(activeProject, "category_description", customDesc);
                 }}
               />
             </FormField>
