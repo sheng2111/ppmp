@@ -350,7 +350,7 @@ export default function DashboardPage() {
                   .catch(() => ({ data: [] })),
             isAdmin
               ? Promise.resolve({ data: [] })
-              : api.get("/notifications/").catch(() => ({ data: [] })),
+              : api.get("/notifications/", { params: { requester_uid: dbUser?.supabase_uid } }).catch(() => ({ data: [] })),
             isAdmin
               ? Promise.resolve({ data: [] })
               : api

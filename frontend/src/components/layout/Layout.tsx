@@ -254,6 +254,7 @@ export default function Layout() {
   const { dbUser, user: supabaseUser, signOut } = useAuth();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [hoverOpened, setHoverOpened] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [expandedGroups, setExpandedGroups] = useState<string[]>(() =>
     loadExpandedGroups(),
@@ -498,6 +499,18 @@ export default function Layout() {
         <aside
           className={`print:hidden ${sidebarOpen ? "w-64" : "w-[72px]"} h-screen shrink-0 flex flex-col overflow-hidden transition-all duration-200 bg-white shadow-[2px_0_12px_rgba(15,23,42,0.04)]`}
           style={{ borderRight: `1px solid ${SIDEBAR_BORDER}` }}
+          onMouseEnter={() => {
+            if (!sidebarOpen) {
+              setSidebarOpen(true);
+              setHoverOpened(true);
+            }
+          }}
+          onMouseLeave={() => {
+            if (hoverOpened) {
+              setSidebarOpen(false);
+              setHoverOpened(false);
+            }
+          }}
         >
           {/* ── Header: blue/cyan gradient brand block ── */}
           <div
@@ -540,7 +553,7 @@ export default function Layout() {
             </div>
             {sidebarOpen && (
               <button
-                onClick={() => setSidebarOpen(false)}
+                onClick={() => { setSidebarOpen(false); setHoverOpened(false); }}
                 aria-label="Collapse sidebar"
                 className="text-white/70 hover:text-white transition-colors shrink-0"
               >
@@ -551,7 +564,7 @@ export default function Layout() {
 
           {!sidebarOpen && (
             <button
-              onClick={() => setSidebarOpen(true)}
+              onClick={() => { setSidebarOpen(true); setHoverOpened(false); }}
               aria-label="Expand sidebar"
               className="mx-auto mt-3 text-slate-300 hover:text-sky-500 transition-colors"
             >
