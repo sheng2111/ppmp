@@ -390,7 +390,7 @@ async def get_eligible_ppmps(
         query["office_id"] = office_id
 
     my_id, is_admin = await _resolve_requester(requester_uid)
-    if my_id and not is_admin:
+    if my_id:
         # PPMP.created_by is stored as a plain string id (see _can_view_ppmp),
         # unlike PurchaseRequest.created_by which is an ObjectId.
         query["created_by"] = my_id
