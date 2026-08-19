@@ -80,6 +80,7 @@ export interface PPMPProject {
 export interface PPMP {
   id: string;
   office_id: string;
+  office_name?: string;
   created_by: string;
   year: number;
   ppmp_no: string | null;

@@ -141,6 +141,7 @@ interface PPMPListItem {
   year?: number;
   status?: string; // 'draft' | 'submitted' | 'approved' | ...
   office_id?: string | number;
+  office_name?: string;
   allocated_budget?: number;
   created_at?: string;
   updated_at?: string;
