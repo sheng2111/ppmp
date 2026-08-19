@@ -2743,7 +2743,7 @@ export default function CreatePPMPPage() {
         <SectionHeader
           icon={<Users className="w-[18px] h-[18px]" strokeWidth={1.8} />}
           title="Signatories"
-          subtitle="Signatories are automatically populated based on the allocated budget. Only the Prepared By name can be edited."
+          subtitle="Signatories are automatically populated based on the allocated budget. Only the Prepared By name and position can be edited."
         />
         <FieldError message={signatoriesGeneralError} />
 
@@ -2822,10 +2822,29 @@ export default function CreatePPMPPage() {
                     className="w-56 max-w-full"
                   >
                     <input
-                      className={`${inputClass(!!errs.position)} bg-gray-100 cursor-not-allowed`}
+                      className={`${inputClass(!!errs.position)} ${
+                        !isPreparedBy ? "bg-gray-100 cursor-not-allowed" : ""
+                      }`}
                       value={s.position}
-                      readOnly
-                      disabled
+                      readOnly={!isPreparedBy}
+                      disabled={!isPreparedBy}
+                      onChange={
+                        isPreparedBy
+                          ? (e) => {
+                              updateSignatory(s.id, "position", e.target.value);
+                              clearSignatoryError(
+                                s.id,
+                                "position",
+                                e.target.value.trim().length > 0,
+                              );
+                            }
+                          : undefined
+                      }
+                      placeholder={
+                        isPreparedBy
+                          ? "e.g. Campus Director"
+                          : "From admin settings"
+                      }
                     />
                   </FormField>
                 </div>
