@@ -50,9 +50,9 @@ const COLUMN_HEADERS = [
 ];
 
 
-// Same grouping used by PPMPDetailPage — up to 3 signatories per row, each
-// getting a 4-column-wide block (A:D / E:H / I:L) so 3 fit across the sheet.
-const SIGNATORIES_PER_ROW = 3;
+// Same grouping used by PPMPDetailPage — 4 signatories per row, each
+// getting a 3-column-wide block (A:C / D:F / G:I / J:L) so 4 fit across the sheet.
+const SIGNATORIES_PER_ROW = 4;
 const SIG_BLOCK_COLS = 3;
 
 export async function exportPPMPToExcel(ppmp: PPMP, office: Office) {
